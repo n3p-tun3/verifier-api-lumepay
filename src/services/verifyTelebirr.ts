@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import logger from '../utils/logger';
 
 export interface TelebirrReceipt {
     payerName: string;
@@ -56,11 +57,11 @@ export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt
             totalPaidAmount: getText('td:contains("ጠቅላላ የተከፈለ/Total Paid Amount")')
         };
 
-        console.log("Extracted data:", extractedData);
+        logger.debug("Extracted data:", extractedData);
 
         return extractedData;
     } catch (error) {
-        console.error("Error verifying Telebirr receipt:", error instanceof Error ? error.message : "Unknown error");
+        logger.error("Error verifying Telebirr receipt:", error instanceof Error ? error.message : "Unknown error");
         return null;
     }
 }

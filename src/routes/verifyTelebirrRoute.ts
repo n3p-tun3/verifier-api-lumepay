@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { verifyTelebirr } from '../services/verifyTelebirr';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.post<{}, {}, VerifyTelebirrRequestBody>(
             const result = await verifyTelebirr(reference);
             res.json(result);
         } catch (err) {
-            console.error(err);
+            logger.error(err);
             res.status(500).json({ success: false, error: 'Server error verifying Telebirr receipt.' });
         }
     }

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import CBERouter from './routes/verifyCBERoute';
 import telebirrRouter from './routes/verifyTelebirrRoute';
+import logger from './utils/logger';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,5 +15,5 @@ app.use('/verify-cbe', CBERouter);
 app.use('/verify-telebirr', telebirrRouter);
 
 app.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    logger.info(`🚀 Server running at http://localhost:${PORT}`);
 });

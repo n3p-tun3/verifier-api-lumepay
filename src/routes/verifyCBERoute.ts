@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { verifyCBE } from '../services/verifyCBE';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -23,7 +24,7 @@ router.post('/', async function (
         const result = await verifyCBE(reference, accountSuffix);
         res.json(result);
     } catch (err) {
-        console.error("💥 Payment verification failed:", err);
+        logger.error("💥 Payment verification failed:", err);
         res.status(500).json({ success: false, error: 'Server error verifying payment.' });
     }
 });
@@ -43,7 +44,7 @@ router.get('/', async function(
         const result = await verifyCBE(reference, accountSuffix);
         res.json(result);
     } catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ success: false, error: 'Server error verifying payment.' });
     }
 });

@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer';
 import axios, { AxiosResponse } from 'axios';
 import pdf from 'pdf-parse';
 import https from 'https';
+import logger from '../utils/logger';
 
 export interface VerifyResult {
     success: boolean;
@@ -37,14 +38,14 @@ export async function verifyCBE(
             const status = response.status();
             const contentType = response.headers()['content-type'];
 
-            console.log(`📡 [${status}] ${resUrl} ${contentType || ''}`);
+            logger.debug(`📡 [${status}] ${resUrl} ${contentType || ''}`);
 
             if (contentType?.includes('pdf')) {
-                console.log('🧾 Possible PDF found:', resUrl);
+                logger.info('🧾 Possible PDF found:', resUrl);
                 detectedPdfUrl = resUrl;
             }
         } catch (err) {
-            console.error('❌ Error logging response:', err);
+            logger.error('❌ Error logging response:', err);
         }
     });
 
@@ -64,7 +65,7 @@ export async function verifyCBE(
         });
 
         const parsed = await pdf(Buffer.from(pdfResponse.data));
-        console.log('🧾 Raw PDF text:\n', parsed.text);
+        logger.debug('🧾 Raw PDF text:\n', parsed.text);
 
         // Match transaction data from the parsed PDF text
         const accountMatches = parsed.text.match(/Account(\d\*{4}\d{4})/g);
@@ -83,13 +84,13 @@ export async function verifyCBE(
         const date = dateRaw ? new Date(dateRaw) : undefined;
 
         // Log parsed data (for debugging only)
-        console.log('✅ payerName:', payerName);
-        console.log('✅ payerAccount:', payerAccount);
-        console.log('✅ receiverName:', receiverName);
-        console.log('✅ receiverAccount:', receiverAccount);
-        console.log('✅ amount:', amount);
-        console.log('✅ reference:', referenceMatch);
-        console.log('✅ date:', date);
+        logger.debug('✅ payerName:', payerName);
+        logger.debug('✅ payerAccount:', payerAccount);
+        logger.debug('✅ receiverName:', receiverName);
+        logger.debug('✅ receiverAccount:', receiverAccount);
+        logger.debug('✅ amount:', amount);
+        logger.debug('✅ reference:', referenceMatch);
+        logger.debug('✅ date:', date);
 
         if (payerName && payerAccount && receiverName && receiverAccount && amount && date && referenceMatch) {
             const formattedDate = date.toDateString();
