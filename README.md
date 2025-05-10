@@ -141,4 +141,4 @@ MIT License — see the [LICENSE](./LICENSE) file for details.
 **Leul Zenebe**  
 Creofam LLC  
 🌐 [creofam.com](https://creofam.com)
-🌐 [Personal Site](https://me.leulzenebe.pro)
+🌐 [Personal Site](https://leulzenebe.pro)
