@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import bodyParser from 'body-parser';
-import verifyRouter from './routes/verify';
+import CBERouter from './routes/verifyCBERoute';
+import telebirrRouter from './routes/verifyTelebirrRoute';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,7 +10,8 @@ app.use(cors());
 app.use(express.json());
 
 // ✅ Attach router to this path
-app.use('/verify-payment', verifyRouter);
+app.use('/verify-cbe', CBERouter);
+app.use('/verify-telebirr', telebirrRouter);
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
