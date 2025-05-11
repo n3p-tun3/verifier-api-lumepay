@@ -3,7 +3,9 @@ import fs from "fs";
 import { Request, Response } from "express";
 import multer from "multer";
 import logger from "../utils/logger";
-import dotenv from 'dotenv';
+import { verifyTelebirr } from "./verifyTelebirr";
+import { verifyCBE } from "./verifyCBE";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -18,8 +20,11 @@ export const verifyImageHandler = [
 
     async (req: Request, res: Response): Promise<void> => {
         try {
+            const autoVerify = req.query.autoVerify === "true";
+            const accountSuffix = req.body?.suffix || null;
+
             if (!req.file) {
-                logger.warn("No file uploaded in /verify-image");
+                logger.warn("No file uploaded");
                 res.status(400).json({ error: "No file uploaded" });
                 return;
             }
@@ -28,7 +33,24 @@ export const verifyImageHandler = [
             const imageBuffer = fs.readFileSync(filePath);
             const base64Image = imageBuffer.toString("base64");
 
-            const prompt = `Extract only the transaction number if it's a Telebirr receipt, or the transaction ID if it's a CBE receipt. Also include the type as either 'telebirr' or 'cbe'. Return result as JSON.`;
+            const prompt = `
+You are a payment receipt analyzer. Based on the uploaded image, determine:
+- If the receipt was issued by Telebirr or the Commercial Bank of Ethiopia (CBE).
+- If it's a CBE receipt, extract the transaction ID (usually starts with 'FT').
+- If it's a Telebirr receipt, extract the transaction number (usually starts with 'CE').
+
+Rules:
+- CBE receipts usually include a purple header with the title "Commercial Bank of Ethiopia" and a structured table.
+- Telebirr receipts are typically green with a large minus sign before the amount.
+- CBE receipts may mention Telebirr (as the receiver) but are still CBE receipts.
+
+Return this JSON format exactly:
+{
+  "type": "telebirr" | "cbe",
+  "transaction_id"?: "FTxxxx" (if CBE),
+  "transaction_number"?: "CExxxx" (if Telebirr)
+}
+            `.trim();
 
             logger.info("Sending image to Mistral Vision...");
 
@@ -50,52 +72,83 @@ export const verifyImageHandler = [
             });
 
             const messageContent = chatResponse.choices?.[0]?.message?.content;
-            logger.debug("Mistral raw content:", { messageContent });
 
             if (!messageContent || typeof messageContent !== "string") {
-                logger.error("Mistral response missing or invalid", { messageContent });
-                res.status(500).json({ error: "Unexpected response format from Mistral" });
+                logger.error("Invalid Mistral response", { messageContent });
+                res.status(500).json({ error: "Invalid OCR response" });
                 return;
             }
 
-            let result;
-            try {
-                result = JSON.parse(messageContent);
-                logger.info("Parsed OCR result:", result);
-            } catch (jsonErr) {
-                logger.error("Failed to parse Mistral result as JSON", { jsonErr, messageContent });
-                res.status(500).json({ error: "Invalid JSON from Mistral response" });
-                return;
-            }
+            const result = JSON.parse(messageContent);
+            logger.info("OCR Result", result);
 
             if (result.type === "telebirr" && result.transaction_number) {
-                res.json({
-                    forward_to: "/verify-telebirr",
-                    payload: { reference: result.transaction_number },
-                });
+                if (autoVerify) {
+                    try {
+                        const data = await verifyTelebirr(result.transaction_number);
+                        res.json({
+                            verified: true,
+                            type: "telebirr",
+                            reference: result.transaction_number,
+                            details: data,
+                        });
+                    } catch (verifyErr) {
+                        logger.error("Telebirr verification failed", { verifyErr });
+                        res.status(500).json({ error: "Verification failed for Telebirr" });
+                    }
+                } else {
+                    res.json({
+                        type: "telebirr",
+                        reference: result.transaction_number,
+                        forward_to: "/verify-telebirr",
+                    });
+                }
                 return;
             }
 
             if (result.type === "cbe" && result.transaction_id) {
-                res.json({
-                    forward_to: "/verify-cbe",
-                    payload: {
+                if (!autoVerify) {
+                    res.json({
+                        type: "cbe",
                         reference: result.transaction_id,
+                        forward_to: "/verify-cbe",
                         accountSuffix: "required_from_user",
-                    },
-                });
+                    });
+                    return;
+                }
+
+                if (!accountSuffix) {
+                    res.status(400).json({
+                        error: "Account suffix is required for CBE verification in autoVerify mode",
+                    });
+                    return;
+                }
+
+                try {
+                    const data = await verifyCBE(result.transaction_id, accountSuffix);
+                    res.json({
+                        verified: true,
+                        type: "cbe",
+                        reference: result.transaction_id,
+                        details: data,
+                    });
+                } catch (verifyErr) {
+                    logger.error("CBE verification failed", { verifyErr });
+                    res.status(500).json({ error: "Verification failed for CBE" });
+                }
                 return;
             }
 
-            logger.warn("Could not determine receipt type or transaction ID", { result });
-            res.status(422).json({ error: "Could not identify receipt type or extract ID." });
+            res.status(422).json({ error: "Unknown or unrecognized receipt type" });
         } catch (err) {
-            logger.error(`Unexpected error in /verify-image: ${err instanceof Error ? err.message : String(err)}`, { stack: err instanceof Error ? err.stack : undefined });
+            logger.error(`Unexpected error in /verify-image: ${err instanceof Error ? err.message : String(err)}`, {
+                stack: err instanceof Error ? err.stack : undefined,
+            });
             res.status(500).json({ error: "Something went wrong processing the image." });
         } finally {
             if (req.file?.path) {
-                fs.unlinkSync(req.file.path); // Cleanup uploaded file
-                logger.debug("Temp file deleted:", { path: req.file.path });
+                fs.unlinkSync(req.file.path);
+                logger.debug("Temp file deleted", { path: req.file.path });
             }
         }
     },
