@@ -17,6 +17,11 @@ export interface VerifyResult {
     error?: string;
 }
 
+// Optional: Normalize names to title case
+function titleCase(str: string): string {
+    return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+}
+
 export async function verifyCBE(
     reference: string,
     accountSuffix: string
@@ -67,23 +72,29 @@ export async function verifyCBE(
         const parsed = await pdf(Buffer.from(pdfResponse.data));
         logger.debug('🧾 Raw PDF text:\n', parsed.text);
 
-        // Match transaction data from the parsed PDF text
-        const accountMatches = parsed.text.match(/Account(\d\*{4}\d{4})/g);
-        const payerName = parsed.text.match(/Payer\s*([A-Z\s]+)\s*Account/i)?.[1]?.trim();
-        const payerAccount = accountMatches?.[0]?.replace('Account', '').trim();
+        const rawText = parsed.text.replace(/\s+/g, ' ').trim();
 
-        const receiverName = parsed.text.match(/Receiver\s*([A-Z\s]+)\s*Account/i)?.[1]?.trim();
-        const receiverAccount = accountMatches?.[1]?.replace('Account', '').trim();
+        // More flexible name and account patterns
+        let payerName = rawText.match(/Payer\s*:?\s*(.*?)\s+Account/i)?.[1]?.trim();
+        let receiverName = rawText.match(/Receiver\s*:?\s*(.*?)\s+Account/i)?.[1]?.trim();
 
-        const reason = parsed.text.match(/Reason \/ Type of service\s*([^\n]+)/i)?.[1]?.trim();
-        const amountText = parsed.text.match(/Transferred Amount\s*([\d,.]+)/)?.[1]?.trim();
-        const referenceMatch = parsed.text.match(/Reference No\. \(VAT Invoice No\)([A-Z0-9]+)/i)?.[1]?.trim();
-        const dateRaw = parsed.text.match(/Payment Date & Time\s*([\d\/:, ]+[APM]{2})/i)?.[1]?.trim();
+        // Match both masked account numbers (CBE or Telebirr format)
+        const accountMatches = [...rawText.matchAll(/Account\s*:?\s*([A-Z0-9]?\*{4}\d{4})/gi)];
+        const payerAccount = accountMatches?.[0]?.[1];
+        const receiverAccount = accountMatches?.[1]?.[1];
+
+        const reason = rawText.match(/Reason\s*\/\s*Type of service\s*:?\s*(.*?)\s+Transferred Amount/i)?.[1]?.trim();
+        const amountText = rawText.match(/Transferred Amount\s*:?\s*([\d,]+\.\d{2})\s*ETB/i)?.[1];
+        const referenceMatch = rawText.match(/Reference No\.?\s*\(VAT Invoice No\)\s*:?\s*([A-Z0-9]+)/i)?.[1]?.trim();
+        const dateRaw = rawText.match(/Payment Date & Time\s*:?\s*([\d\/,: ]+[APM]{2})/i)?.[1]?.trim();
 
         const amount = amountText ? parseFloat(amountText.replace(/,/g, '')) : undefined;
         const date = dateRaw ? new Date(dateRaw) : undefined;
 
-        // Log parsed data (for debugging only)
+        // Optional title-case normalization
+        payerName = payerName ? titleCase(payerName) : undefined;
+        receiverName = receiverName ? titleCase(receiverName) : undefined;
+
         logger.debug('✅ payerName:', payerName);
         logger.debug('✅ payerAccount:', payerAccount);
         logger.debug('✅ receiverName:', receiverName);
@@ -112,6 +123,7 @@ Date: ${formattedDate}
 Reference: ${referenceMatch}
 `.trim();
 
+            logger.info(message);
             return {
                 success: true,
                 payer: payerName,
@@ -124,6 +136,16 @@ Reference: ${referenceMatch}
                 reason: reason || null
             };
         }
+
+        logger.warn("⚠️ Could not extract all required fields", {
+            payerName,
+            payerAccount,
+            receiverName,
+            receiverAccount,
+            amount,
+            referenceMatch,
+            date
+        });
 
         return {
             success: false,
