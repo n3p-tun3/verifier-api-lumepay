@@ -81,11 +81,6 @@ Verify a CBE payment using a reference number and account suffix.
   "accountSuffix": "ACCOUNT_SUFFIX"
 }
 ```
-
-#### `GET /verify-cbe?reference=REFERENCE_NUMBER&accountSuffix=ACCOUNT_SUFFIX`
-
-Alternative verification using query parameters.
-
 ---
 
 ### ✅ Telebirr Verification
