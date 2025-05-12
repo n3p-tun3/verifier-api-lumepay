@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import * as cheerio from "cheerio";
 import logger from '../utils/logger';
 
@@ -19,9 +19,18 @@ export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt
     const url = `https://transactioninfo.ethiotelecom.et/receipt/${reference}`;
 
     try {
+        logger.info(`Starting Telebirr verification for reference: ${reference}`);
         const response = await axios.get(url);
+        logger.debug(`Received response from Telebirr API with status: ${response.status}`);
+        
         const $ = cheerio.load(response.data);
-
+        
+        // Log HTML content in debug mode to help diagnose scraping issues
+        logger.debug(`HTML content length: ${response.data.length} bytes`);
+        if (response.data.length < 100) {
+            logger.warn(`Suspiciously short HTML response: ${response.data}`);
+        }
+        
         const getText = (selector: string): string =>
             $(selector).next().text().trim();
 
@@ -59,9 +68,33 @@ export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt
 
         logger.debug("Extracted data:", extractedData);
 
+        logger.info(`Successfully extracted Telebirr data for reference: ${reference}`, {
+            receiptNo: extractedData.receiptNo,
+            payerName: extractedData.payerName,
+            transactionStatus: extractedData.transactionStatus
+        });
+        
         return extractedData;
     } catch (error) {
-        logger.error("Error verifying Telebirr receipt:", error instanceof Error ? error.message : "Unknown error");
+        // Enhanced error logging with request details
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        
+        // Check if it's an Axios error to safely access response properties
+        const axiosError = error as AxiosError;
+        const responseDetails = axiosError.response ? {
+            status: axiosError.response.status,
+            statusText: axiosError.response.statusText,
+            responseData: axiosError.response.data
+        } : {};
+        
+        logger.error(`Error verifying Telebirr receipt for reference ${reference}:`, {
+            error: errorMessage,
+            stack: errorStack,
+            url,
+            ...responseDetails
+        });
+        
         return null;
     }
 }

@@ -31,7 +31,14 @@ export async function verifyCBE(
 
     const browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--ignore-certificate-errors',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
     });
 
     const page = await browser.newPage();

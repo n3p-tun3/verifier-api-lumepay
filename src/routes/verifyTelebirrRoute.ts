@@ -20,10 +20,18 @@ router.post<{}, {}, VerifyTelebirrRequestBody>(
 
         try {
             const result = await verifyTelebirr(reference);
-            res.json(result);
+            if (!result) {
+                res.status(404).json({ success: false, error: 'Receipt not found or could not be processed.' });
+                return;
+            }
+            res.json({ success: true, data: result });
         } catch (err) {
-            logger.error(err);
-            res.status(500).json({ success: false, error: 'Server error verifying Telebirr receipt.' });
+            logger.error('Telebirr verification error:', err);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Server error verifying Telebirr receipt.',
+                message: err instanceof Error ? err.message : 'Unknown error'
+            });
         }
     }
 );
