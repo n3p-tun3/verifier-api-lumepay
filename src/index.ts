@@ -39,6 +39,21 @@ app.use('/verify-telebirr', telebirrRouter);
 // Fix: Apply middleware functions individually instead of spreading the array
 app.post("/verify-image", verifyImageHandler[0], verifyImageHandler[1]);
 
+// Add a root route handler to display API information
+app.get('/', (req: Request, res: Response) => {
+    res.status(200).json({
+        message: "Verifier API is running",
+        version: "1.0.0",
+        endpoints: [
+            "/verify-cbe",
+            "/verify-telebirr",
+            "/verify-image"
+        ],
+        health: "/health",
+        documentation: "https://github.com/Vixen878/verifier-api"
+    });
+});
+
 // Global error handler - properly typed as an error handler
 const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
     logger.error('Unhandled error:', err);
