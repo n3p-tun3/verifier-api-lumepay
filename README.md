@@ -1,8 +1,7 @@
-
 # 📄 Payment Verification API
 
 This API provides verification services for payment transactions made through **Commercial Bank of Ethiopia (CBE)** and **Telebirr** mobile payment platforms in Ethiopia.  
-It allows applications to verify the authenticity and details of payment receipts by reference numbers.
+It allows applications to verify the authenticity and details of payment receipts by reference numbers or uploaded images.
 
 > ⚠️ **Disclaimer**: This is **not an official API**. I am **not affiliated with Ethio Telecom, Telebirr, or Commercial Bank of Ethiopia (CBE)**. This tool is built for personal and developer utility purposes only and scrapes publicly available data.
 
@@ -11,6 +10,7 @@ It allows applications to verify the authenticity and details of payment receipt
 ## ✅ Features
 
 ### 🔷 CBE Payment Verification
+
 - Verifies CBE bank transfers using reference number and account suffix
 - Extracts key payment details:
   - Payer name and account
@@ -21,6 +21,7 @@ It allows applications to verify the authenticity and details of payment receipt
   - Payment description/reason
 
 ### 🔶 Telebirr Payment Verification
+
 - Verifies Telebirr mobile money transfers using a reference number
 - Extracts key transaction details:
   - Payer name and Telebirr number
@@ -32,13 +33,19 @@ It allows applications to verify the authenticity and details of payment receipt
   - Service fees and VAT
   - Total paid amount
 
+### 🔷 Image-based Payment Verification
+
+- Verifies payments by analyzing uploaded receipt images
+- Uses **Mistral AI** to detect receipt type and extract transaction details
+- Supports both **CBE** and **Telebirr** receipt screenshots
+
 ---
 
 ## ⚙️ Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/verifier-api.git
+git clone https://github.com/Vixen878/verifier-api
 
 # Navigate to the project directory
 cd verifier-api
@@ -75,12 +82,14 @@ pnpm start
 Verify a CBE payment using a reference number and account suffix.
 
 **Request Body:**
+
 ```json
 {
   "reference": "REFERENCE_NUMBER",
   "accountSuffix": "ACCOUNT_SUFFIX"
 }
 ```
+
 ---
 
 ### ✅ Telebirr Verification
@@ -90,11 +99,79 @@ Verify a CBE payment using a reference number and account suffix.
 Verify a Telebirr payment using a reference number.
 
 **Request Body:**
+
 ```json
 {
   "reference": "REFERENCE_NUMBER"
 }
 ```
+
+---
+
+### ✅ Image Verification
+
+#### `POST /verify-image`
+
+Verify a payment by uploading an image of the receipt. This endpoint supports both CBE and Telebirr screenshots.
+
+**Request Body:**
+Multipart form-data with an image file.
+
+- Optional Query Param: `?autoVerify=true`  
+  When enabled, the system detects the receipt type and routes it to the correct verification flow automatically.
+- **Note**: If the auto-detected receipt is from CBE, the request **must** include your `Suffix` (last 8 digits of your account).
+
+---
+
+### ✅ Health Check
+
+#### `GET /health`
+
+Check if the API is running properly.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2023-06-15T12:34:56.789Z"
+}
+```
+
+---
+
+### ✅ API Information
+
+#### `GET /`
+
+Get information about the API and available endpoints.
+
+**Response:**
+
+```json
+{
+  "message": "Verifier API is running",
+  "version": "1.0.0",
+  "endpoints": ["/verify-cbe", "/verify-telebirr", "/verify-image"],
+  "health": "/health",
+  "documentation": "https://github.com/Vixen878/verifier-api"
+}
+```
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+PORT=3001
+NODE_ENV=development # or production
+LOG_LEVEL=info       # or debug, error
+MISTRAL_API_KEY=your_mistral_api_key # Required for image verification
+```
+
+You can get an API key for Mistral AI from [https://mistral.ai/](https://mistral.ai/)
 
 ---
 
@@ -122,6 +199,7 @@ LOG_LEVEL=debug
 - Cheerio – HTML parsing
 - Puppeteer – headless browser automation (used for CBE scraping)
 - Winston – structured logging
+- Mistral AI – OCR for image-based verification
 
 ---
 
@@ -135,5 +213,5 @@ MIT License — see the [LICENSE](./LICENSE) file for details.
 
 **Leul Zenebe**  
 Creofam LLC  
-🌐 [creofam.com](https://creofam.com)
+🌐 [creofam.com](https://creofam.com)  
 🌐 [Personal Site](https://leulzenebe.pro)
