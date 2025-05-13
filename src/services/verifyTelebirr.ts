@@ -66,22 +66,55 @@ function scrapeTelebirrReceipt(html: string): TelebirrReceipt {
 }
 
 /**
- * Fetches and scrapes Telebirr receipt data from a given URL
+ * Parses Telebirr receipt data from JSON response
+ * @param jsonData The JSON data from the proxy endpoint
+ * @returns Extracted Telebirr receipt data
+ */
+function parseTelebirrJson(jsonData: any): TelebirrReceipt | null {
+    try {
+        // Check if the response has the expected structure
+        if (!jsonData || !jsonData.success || !jsonData.data) {
+            logger.warn("Invalid JSON structure from proxy endpoint", { jsonData });
+            return null;
+        }
+
+        const data = jsonData.data;
+        
+        return {
+            payerName: data.payerName || "",
+            payerTelebirrNo: data.payerTelebirrNo || "",
+            creditedPartyName: data.creditedPartyName || "",
+            creditedPartyAccountNo: data.creditedPartyAccountNo || "",
+            transactionStatus: data.transactionStatus || "",
+            receiptNo: data.receiptNo || "",
+            paymentDate: data.paymentDate || "",
+            settledAmount: data.settledAmount || "N/A",
+            serviceFeeVAT: data.serviceFeeVAT || "",
+            totalPaidAmount: data.totalPaidAmount || ""
+        };
+    } catch (error) {
+        logger.error("Error parsing JSON from proxy endpoint", { error, jsonData });
+        return null;
+    }
+}
+
+/**
+ * Fetches and processes Telebirr receipt data from the primary source (HTML)
  * @param reference The Telebirr reference number
  * @param baseUrl The base URL to fetch the receipt from
  * @returns The scraped receipt data or null if failed
  */
-async function fetchAndScrapeTelebirr(reference: string, baseUrl: string): Promise<TelebirrReceipt | null> {
+async function fetchFromPrimarySource(reference: string, baseUrl: string): Promise<TelebirrReceipt | null> {
     const url = `${baseUrl}${reference}`;
     
     try {
-        logger.info(`Attempting to fetch Telebirr receipt from: ${url}`);
+        logger.info(`Attempting to fetch Telebirr receipt from primary source: ${url}`);
         const response = await axios.get(url, { timeout: 15000 }); // 15 second timeout
         logger.debug(`Received response with status: ${response.status}`);
         
         const extractedData = scrapeTelebirrReceipt(response.data);
         
-        logger.debug("Extracted data:", extractedData);
+        logger.debug("Extracted data from HTML:", extractedData);
         logger.info(`Successfully extracted Telebirr data for reference: ${reference}`, {
             receiptNo: extractedData.receiptNo,
             payerName: extractedData.payerName,
@@ -102,7 +135,76 @@ async function fetchAndScrapeTelebirr(reference: string, baseUrl: string): Promi
             responseData: axiosError.response.data
         } : {};
         
-        logger.error(`Error fetching Telebirr receipt from ${url}:`, {
+        logger.error(`Error fetching Telebirr receipt from primary source ${url}:`, {
+            error: errorMessage,
+            stack: errorStack,
+            ...responseDetails
+        });
+        
+        return null;
+    }
+}
+
+/**
+ * Fetches and processes Telebirr receipt data from the fallback proxy (JSON)
+ * @param reference The Telebirr reference number
+ * @param proxyUrl The proxy URL to fetch the receipt from
+ * @returns The parsed receipt data or null if failed
+ */
+async function fetchFromProxySource(reference: string, proxyUrl: string): Promise<TelebirrReceipt | null> {
+    const url = `${proxyUrl}${reference}`;
+    
+    try {
+        logger.info(`Attempting to fetch Telebirr receipt from proxy: ${url}`);
+        const response = await axios.get(url, { 
+            timeout: 15000,
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'VerifierAPI/1.0'
+            }
+        });
+        
+        logger.debug(`Received proxy response with status: ${response.status}`);
+        
+        // Check if response is JSON
+        let data = response.data;
+        if (typeof data === 'string') {
+            try {
+                data = JSON.parse(data);
+            } catch (e) {
+                logger.warn("Proxy response is not valid JSON, attempting to scrape as HTML");
+                // If it's not JSON, try to scrape it as HTML
+                return scrapeTelebirrReceipt(response.data);
+            }
+        }
+        
+        const extractedData = parseTelebirrJson(data);
+        if (!extractedData) {
+            logger.warn("Failed to parse JSON from proxy, attempting to scrape as HTML");
+            // If JSON parsing fails, try to scrape it as HTML
+            return scrapeTelebirrReceipt(response.data);
+        }
+        
+        logger.debug("Extracted data from JSON:", extractedData);
+        logger.info(`Successfully extracted Telebirr data from proxy for reference: ${reference}`, {
+            receiptNo: extractedData.receiptNo,
+            payerName: extractedData.payerName,
+            transactionStatus: extractedData.transactionStatus
+        });
+        
+        return extractedData;
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        
+        const axiosError = error as AxiosError;
+        const responseDetails = axiosError.response ? {
+            status: axiosError.response.status,
+            statusText: axiosError.response.statusText,
+            responseData: axiosError.response.data
+        } : {};
+        
+        logger.error(`Error fetching Telebirr receipt from proxy ${url}:`, {
             error: errorMessage,
             stack: errorStack,
             ...responseDetails
@@ -119,14 +221,14 @@ export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt
     const fallbackUrl = "https://leul.et/verify.php?reference=";
     
     // Try primary source first
-    const primaryResult = await fetchAndScrapeTelebirr(reference, primaryUrl);
+    const primaryResult = await fetchFromPrimarySource(reference, primaryUrl);
     if (primaryResult) {
         return primaryResult;
     }
     
     // If primary source fails, try fallback
     logger.warn(`Primary Telebirr verification failed for reference: ${reference}. Trying fallback proxy...`);
-    const fallbackResult = await fetchAndScrapeTelebirr(reference, fallbackUrl);
+    const fallbackResult = await fetchFromProxySource(reference, fallbackUrl);
     
     if (fallbackResult) {
         logger.info(`Successfully verified Telebirr receipt using fallback proxy for reference: ${reference}`);
