@@ -215,27 +215,25 @@ async function fetchFromProxySource(reference: string, proxyUrl: string): Promis
 }
 
 export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt | null> {
-    // Primary source - direct from Ethio Telecom
     const primaryUrl = "https://transactioninfo.ethiotelecom.et/receipt/";
-    // Fallback source - proxy hosted in Ethiopia
     const fallbackUrl = "https://leul.et/verify.php?reference=";
-    
-    // Try primary source first
-    const primaryResult = await fetchFromPrimarySource(reference, primaryUrl);
-    if (primaryResult) {
-        return primaryResult;
+
+    const skipPrimary = process.env.SKIP_PRIMARY_VERIFICATION === "true";
+
+    if (!skipPrimary) {
+        const primaryResult = await fetchFromPrimarySource(reference, primaryUrl);
+        if (primaryResult) return primaryResult;
+        logger.warn(`Primary Telebirr verification failed for reference: ${reference}. Trying fallback proxy...`);
+    } else {
+        logger.info(`Skipping primary verifier due to SKIP_PRIMARY_VERIFICATION=true`);
     }
-    
-    // If primary source fails, try fallback
-    logger.warn(`Primary Telebirr verification failed for reference: ${reference}. Trying fallback proxy...`);
+
     const fallbackResult = await fetchFromProxySource(reference, fallbackUrl);
-    
     if (fallbackResult) {
         logger.info(`Successfully verified Telebirr receipt using fallback proxy for reference: ${reference}`);
         return fallbackResult;
     }
-    
-    // Both primary and fallback failed
+
     logger.error(`Both primary and fallback Telebirr verification failed for reference: ${reference}`);
     return null;
 }
