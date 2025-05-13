@@ -41,6 +41,30 @@ It allows applications to verify the authenticity and details of payment receipt
 
 ---
 
+## 🌐 Hosting Limitations for `verify-telebirr`
+
+Due to **regional restrictions** by the Telebirr system, hosting the `verify-telebirr` endpoint outside of Ethiopia (e.g., on a VPS like Hetzner or AWS) may result in failed receipt verification. Specifically:
+
+- Telebirr’s receipt pages (`https://transactioninfo.ethiotelecom.et/receipt/[REFERENCE]`) often **block or timeout** requests made from foreign IP addresses.
+- This results in errors such as `ERR_FAILED`, `403`, or DNS resolution failures.
+
+### ❌ Affected:
+
+- VPS or cloud servers located outside Ethiopia
+
+### ✅ Works Best On:
+
+- Ethiopian-hosted servers (e.g., Ethio Telecom web hosting, TeleCloud VPS)
+- Developers self-hosting the code on infrastructure based in Ethiopia
+
+#### 🛠 Proxy Support:
+
+This project includes a secondary Telebirr verification relay hosted inside Ethiopia. When the primary `verify-telebirr` fetch fails on your foreign VPS, the server can **fallback to our proxy** to complete the verification.
+
+For best results and full control, clone the repository and **self-host from inside Ethiopia**.
+
+---
+
 ## ⚙️ Installation
 
 ```bash

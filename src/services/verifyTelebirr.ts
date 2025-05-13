@@ -15,59 +15,73 @@ export interface TelebirrReceipt {
     totalPaidAmount: string;
 }
 
-export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt | null> {
-    const url = `https://transactioninfo.ethiotelecom.et/receipt/${reference}`;
+/**
+ * Scrapes Telebirr receipt data from HTML content
+ * @param html The HTML content to scrape
+ * @returns Extracted Telebirr receipt data
+ */
+function scrapeTelebirrReceipt(html: string): TelebirrReceipt {
+    const $ = cheerio.load(html);
+    
+    // Log HTML content in debug mode to help diagnose scraping issues
+    logger.debug(`HTML content length: ${html.length} bytes`);
+    if (html.length < 100) {
+        logger.warn(`Suspiciously short HTML response: ${html}`);
+    }
+    
+    const getText = (selector: string): string =>
+        $(selector).next().text().trim();
 
+    const getPaymentDate = (): string =>
+        $('.receipttableTd').filter((_, el) => $(el).text().includes("-202")).first().text().trim();
+
+    const getSettledAmount = (): string => {
+        // fallback: find by partial match of 'Birr'
+        const candidate = $('td')
+            .filter((_, el) => {
+                const text = $(el).text();
+                return text.includes("Birr") && Boolean(text.trim().match(/^\d+(\.\d{1,2})? Birr$/));
+            })
+            .last()
+            .text()
+            .trim();
+        return candidate || "N/A";
+    };
+
+    return {
+        payerName: getText('td:contains("የከፋይ ስም/Payer Name")'),
+        payerTelebirrNo: getText('td:contains("የከፋይ ቴሌብር ቁ./Payer telebirr no.")'),
+        creditedPartyName: getText('td:contains("የገንዘብ ተቀባይ ስም/Credited Party name")'),
+        creditedPartyAccountNo: getText('td:contains("የገንዘብ ተቀባይ ቴሌብር ቁ./Credited party account no")'),
+        transactionStatus: getText('td:contains("የክፍያው ሁኔታ/transaction status")'),
+        receiptNo: $('td.receipttableTd.receipttableTd2')
+            .eq(1) // second match: the value, not the label
+            .text()
+            .trim(),
+        paymentDate: getPaymentDate(),
+        settledAmount: getSettledAmount(),
+        serviceFeeVAT: getText('td:contains("የአገልግሎት ክፍያ ተ.እ.ታ/Service fee VAT")'),
+        totalPaidAmount: getText('td:contains("ጠቅላላ የተከፈለ/Total Paid Amount")')
+    };
+}
+
+/**
+ * Fetches and scrapes Telebirr receipt data from a given URL
+ * @param reference The Telebirr reference number
+ * @param baseUrl The base URL to fetch the receipt from
+ * @returns The scraped receipt data or null if failed
+ */
+async function fetchAndScrapeTelebirr(reference: string, baseUrl: string): Promise<TelebirrReceipt | null> {
+    const url = `${baseUrl}${reference}`;
+    
     try {
-        logger.info(`Starting Telebirr verification for reference: ${reference}`);
-        const response = await axios.get(url);
-        logger.debug(`Received response from Telebirr API with status: ${response.status}`);
+        logger.info(`Attempting to fetch Telebirr receipt from: ${url}`);
+        const response = await axios.get(url, { timeout: 15000 }); // 15 second timeout
+        logger.debug(`Received response with status: ${response.status}`);
         
-        const $ = cheerio.load(response.data);
+        const extractedData = scrapeTelebirrReceipt(response.data);
         
-        // Log HTML content in debug mode to help diagnose scraping issues
-        logger.debug(`HTML content length: ${response.data.length} bytes`);
-        if (response.data.length < 100) {
-            logger.warn(`Suspiciously short HTML response: ${response.data}`);
-        }
-        
-        const getText = (selector: string): string =>
-            $(selector).next().text().trim();
-
-        const getPaymentDate = (): string =>
-            $('.receipttableTd').filter((_, el) => $(el).text().includes("-202")).first().text().trim();
-
-        const getSettledAmount = (): string => {
-            // fallback: find by partial match of 'Birr'
-            const candidate = $('td')
-                .filter((_, el) => {
-                    const text = $(el).text();
-                    return text.includes("Birr") && Boolean(text.trim().match(/^\d+(\.\d{1,2})? Birr$/));
-                })
-                .last()
-                .text()
-                .trim();
-            return candidate || "N/A";
-        };
-
-        const extractedData: TelebirrReceipt = {
-            payerName: getText('td:contains("የከፋይ ስም/Payer Name")'),
-            payerTelebirrNo: getText('td:contains("የከፋይ ቴሌብር ቁ./Payer telebirr no.")'),
-            creditedPartyName: getText('td:contains("የገንዘብ ተቀባይ ስም/Credited Party name")'),
-            creditedPartyAccountNo: getText('td:contains("የገንዘብ ተቀባይ ቴሌብር ቁ./Credited party account no")'),
-            transactionStatus: getText('td:contains("የክፍያው ሁኔታ/transaction status")'),
-            receiptNo: $('td.receipttableTd.receipttableTd2')
-                .eq(1) // second match: the value, not the label
-                .text()
-                .trim(),
-            paymentDate: getPaymentDate(),
-            settledAmount: getSettledAmount(),
-            serviceFeeVAT: getText('td:contains("የአገልግሎት ክፍያ ተ.እ.ታ/Service fee VAT")'),
-            totalPaidAmount: getText('td:contains("ጠቅላላ የተከፈለ/Total Paid Amount")')
-        };
-
         logger.debug("Extracted data:", extractedData);
-
         logger.info(`Successfully extracted Telebirr data for reference: ${reference}`, {
             receiptNo: extractedData.receiptNo,
             payerName: extractedData.payerName,
@@ -88,13 +102,38 @@ export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt
             responseData: axiosError.response.data
         } : {};
         
-        logger.error(`Error verifying Telebirr receipt for reference ${reference}:`, {
+        logger.error(`Error fetching Telebirr receipt from ${url}:`, {
             error: errorMessage,
             stack: errorStack,
-            url,
             ...responseDetails
         });
         
         return null;
     }
+}
+
+export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt | null> {
+    // Primary source - direct from Ethio Telecom
+    const primaryUrl = "https://transactioninfo.ethiotelecom.et/receipt/";
+    // Fallback source - proxy hosted in Ethiopia
+    const fallbackUrl = "https://leul.et/verify.php?reference=";
+    
+    // Try primary source first
+    const primaryResult = await fetchAndScrapeTelebirr(reference, primaryUrl);
+    if (primaryResult) {
+        return primaryResult;
+    }
+    
+    // If primary source fails, try fallback
+    logger.warn(`Primary Telebirr verification failed for reference: ${reference}. Trying fallback proxy...`);
+    const fallbackResult = await fetchAndScrapeTelebirr(reference, fallbackUrl);
+    
+    if (fallbackResult) {
+        logger.info(`Successfully verified Telebirr receipt using fallback proxy for reference: ${reference}`);
+        return fallbackResult;
+    }
+    
+    // Both primary and fallback failed
+    logger.error(`Both primary and fallback Telebirr verification failed for reference: ${reference}`);
+    return null;
 }
