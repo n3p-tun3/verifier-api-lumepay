@@ -65,6 +65,18 @@ For best results and full control, clone the repository and **self-host from ins
 
 ---
 
+### 🔁 Skip Primary Verifier (For VPS Users)
+
+If you know your environment cannot access the primary endpoint, set the following in your `.env`:
+
+```env
+SKIP_PRIMARY_VERIFICATION=true
+```
+
+This will skip the primary Telebirr receipt fetch entirely and go straight to the fallback proxy — only for your local use case. Other users can still benefit from both layers.
+
+---
+
 ## ⚙️ Installation
 
 ```bash
@@ -193,6 +205,7 @@ PORT=3001
 NODE_ENV=development # or production
 LOG_LEVEL=info       # or debug, error
 MISTRAL_API_KEY=your_mistral_api_key # Required for image verification
+SKIP_PRIMARY_VERIFICATION=false      # Set to true to bypass primary fetch
 ```
 
 You can get an API key for Mistral AI from [https://mistral.ai/](https://mistral.ai/)
