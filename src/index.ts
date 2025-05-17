@@ -10,8 +10,9 @@ import telebirrRouter from './routes/verifyTelebirrRoute';
 import adminRouter from './routes/adminRoute';
 import logger from './utils/logger';
 import { verifyImageHandler } from "./services/verifyImage";
-import { requestLogger } from './middleware/requestLogger';
+import { requestLogger, initializeStatsCache } from './middleware/requestLogger';
 import { apiKeyAuth } from './middleware/apiKeyAuth';
+import { prisma, disconnectPrisma } from './utils/prisma';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +21,21 @@ const PORT = process.env.PORT || 3001;
 logger.info(`Starting server in ${process.env.NODE_ENV || 'development'} mode`);
 logger.info(`Node version: ${process.version}`);
 logger.info(`Platform: ${process.platform}`);
+
+// Initialize database connection and cache
+(async () => {
+    try {
+        // Test database connection
+        await prisma.$connect();
+        logger.info('Connected to database successfully');
+
+        // Initialize stats cache from database
+        await initializeStatsCache();
+    } catch (error) {
+        logger.error('Failed to initialize database connection:', error);
+        process.exit(1);
+    }
+})();
 
 app.use(cors());
 app.use(express.json());
@@ -48,57 +64,53 @@ app.use(jsonErrorHandler);
 // ✅ Attach routers to paths
 app.use('/verify-cbe', CBERouter);
 app.use('/verify-telebirr', telebirrRouter);
-// Remove this line since we already registered admin routes
-// app.use('/admin', adminRouter);
-
-// Fix: Apply middleware functions individually instead of spreading the array
-app.post("/verify-image", verifyImageHandler[0], verifyImageHandler[1]);
-
-// Add a root route handler to display API information
-app.get('/', (req: Request, res: Response) => {
-    res.status(200).json({
-        message: "Verifier API is running",
-        version: "1.0.0",
-        endpoints: [
-            "/verify-cbe",
-            "/verify-telebirr",
-            "/verify-image"
-        ],
-        adminEndpoints: [
-            "/admin/api-keys",
-            "/admin/stats"
-        ],
-        health: "/health",
-        documentation: "https://github.com/Vixen878/verifier-api"
-    });
-});
-
-// Global error handler - properly typed as an error handler
-const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
-    logger.error('Unhandled error:', err);
-    res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: process.env.NODE_ENV === 'production' ? undefined : err.message
-    });
-};
-
-app.use(globalErrorHandler);
+app.post('/verify-image', verifyImageHandler);
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-    logger.info(`🚀 Server running at http://localhost:${PORT}`);
+// Root endpoint
+app.get('/', (req: Request, res: Response) => {
+    res.json({
+        name: 'Payment Verification API',
+        version: '1.0.0',
+        endpoints: [
+            '/verify-cbe',
+            '/verify-telebirr',
+            '/verify-image'
+        ]
+    });
 });
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-    logger.error('Uncaught exception:', err);
+// Global error handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    logger.error('Unhandled error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled rejection at:', { promise, reason });
+// Start the server
+const server = app.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`);
 });
+
+// Graceful shutdown
+const gracefulShutdown = async () => {
+    logger.info('Shutting down server...');
+    server.close(async () => {
+        logger.info('HTTP server closed');
+        await disconnectPrisma();
+        process.exit(0);
+    });
+
+    // Force close after 10 seconds
+    setTimeout(() => {
+        logger.error('Forced shutdown after timeout');
+        process.exit(1);
+    }, 10000);
+};
+
+// Listen for termination signals
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

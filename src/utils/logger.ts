@@ -1,26 +1,48 @@
-import { createLogger, format, transports, Logger } from "winston";
+import { createLogger, format, transports, Logger } from 'winston';
 import 'winston-daily-rotate-file';
 
-const { combine, timestamp, printf, errors, json, colorize } = format;
+const { combine, timestamp, printf, errors, colorize } = format;
 
-// Custom format for detailed logging
-const myFormat = printf(({ level, message, timestamp, stack, ...metadata }) => {
-    let log = `[${timestamp}] ${level.toUpperCase()}: ${message}`;
+// 🎨 Fancy Console Format with Emojis and Timestamp
+const emojiFormat = printf(info => {
+    const { level, message, timestamp, stack, ...meta } = info;
 
-    // Add stack trace for errors
+    const emojis: Record<string, string> = {
+        info: 'ℹ️ ',
+        warn: '⚠️ ',
+        error: '❌',
+        debug: '🐛',
+    };
+
+    const emoji = emojis[level] || '';
+    let log = `${emoji}[${timestamp}] ${level.toUpperCase()}: ${message}`;
+
     if (stack) {
-        log += `\n${stack}`;
+        log += `\n🔍 Stack:\n${stack}`;
     }
 
-    // Add metadata if present
-    if (Object.keys(metadata).length > 0) {
-        log += `\n${JSON.stringify(metadata, null, 2)}`;
+    const { service, ...rest } = meta;
+    const extraMeta = Object.keys(rest).length > 0 ? rest : null;
+
+    if (extraMeta) {
+        const formatted = JSON.stringify(extraMeta, null, 2).replace(/^/gm, '   › ');
+        log += `\n📦 Metadata:\n${formatted}`;
     }
 
     return log;
 });
 
-// Create daily rotate file transports
+// 📝 Plain Format for File Logging
+const fileFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
+    let log = `[${timestamp}] ${level.toUpperCase()}: ${message}`;
+    if (stack) log += `\n${stack}`;
+    if (Object.keys(meta).length > 0) {
+        log += `\n${JSON.stringify(meta, null, 2)}`;
+    }
+    return log;
+});
+
+// 🗂 Error Log File (Rotating)
 const errorRotateFile = new transports.DailyRotateFile({
     filename: 'logs/error-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
@@ -29,53 +51,51 @@ const errorRotateFile = new transports.DailyRotateFile({
     maxFiles: '14d',
     format: combine(
         errors({ stack: true }),
-        timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-        myFormat
+        timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        fileFormat
     )
 });
 
+// 🗂 Combined Log File (Rotating)
 const combinedRotateFile = new transports.DailyRotateFile({
     filename: 'logs/combined-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
     maxSize: '5m',
     maxFiles: '14d',
     format: combine(
-        timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-        myFormat
+        timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        fileFormat
     )
 });
 
-// Create logger with enhanced configuration
+// 🧠 Main Winston Logger
 const logger = createLogger({
-    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug"),
+    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
     format: combine(
-        errors({ stack: true }), // Capture stack traces
-        timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-        myFormat
+        errors({ stack: true }),
+        timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        fileFormat
     ),
-    defaultMeta: { service: 'verifier-api' }, // Add service name to all logs
+    defaultMeta: { service: 'verifier-api' },
     transports: [
-        // Console transport with colors for development
         new transports.Console({
             format: combine(
                 colorize(),
-                timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-                myFormat
+                timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+                emojiFormat
             )
         }),
         errorRotateFile,
         combinedRotateFile
     ],
-    // Don't exit on uncaught exceptions
     exitOnError: false
 });
 
-// Define a custom type for our extended logger
+// ➕ Optional stream for morgan logging
 interface CustomLogger extends Omit<Logger, 'stream'> {
     stream?: { write(message: string): void };
 }
 
-// Add a stream for Morgan if you're using Express
 const customLogger = logger as unknown as CustomLogger;
 customLogger.stream = {
     write: (message: string) => {

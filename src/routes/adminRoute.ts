@@ -12,10 +12,6 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || 'change-this-secret-key';
 const checkAdminAuth = (req: Request, res: Response, next: Function) => {
     const adminKey = req.headers['x-admin-key'] || req.query.adminKey;
     
-    // Add debug logging
-    console.log('Expected admin key:', ADMIN_SECRET);
-    console.log('Received admin key:', adminKey);
-    
     if (adminKey !== ADMIN_SECRET) {
         return res.status(403).json({ success: false, error: 'Unauthorized admin access' });
     }
@@ -24,6 +20,7 @@ const checkAdminAuth = (req: Request, res: Response, next: Function) => {
 };
 
 // Generate a new API key
+// Update the API key generation route
 router.post('/api-keys', checkAdminAuth as RequestHandler, async (req: Request, res: Response): Promise<void> => {
     const { owner } = req.body;
 
@@ -33,7 +30,7 @@ router.post('/api-keys', checkAdminAuth as RequestHandler, async (req: Request, 
     }
 
     try {
-        const apiKey = generateApiKey(owner);
+        const apiKey = await generateApiKey(owner);
         logger.info(`New API key generated for ${owner}`);
 
         res.status(201).json({
@@ -50,43 +47,38 @@ router.post('/api-keys', checkAdminAuth as RequestHandler, async (req: Request, 
     }
 });
 
-// List all API keys (admin only)
-router.get('/api-keys', checkAdminAuth as RequestHandler, (req: Request, res: Response) => {
-    const apiKeys = getApiKeys();
-    const keyList = Array.from(apiKeys.values()).map(key => ({
-        key: key.key.substring(0, 8) + '...',  // Only show first 8 chars for security
-        owner: key.owner,
-        createdAt: key.createdAt,
-        lastUsed: key.lastUsed,
-        usageCount: key.usageCount
-    }));
+// Update the API keys listing route
+router.get('/api-keys', checkAdminAuth as RequestHandler, async (req: Request, res: Response) => {
+    try {
+        const apiKeys = await getApiKeys();
+        const keyList = apiKeys.map(key => ({
+            key: key.key.substring(0, 8) + '...',  // Only show first 8 chars for security
+            owner: key.owner,
+            createdAt: key.createdAt,
+            lastUsed: key.lastUsed,
+            usageCount: key.usageCount,
+            isActive: key.isActive
+        }));
 
-    res.json({ success: true, data: keyList });
+        res.json({ success: true, data: keyList });
+    } catch (err) {
+        logger.error('Error fetching API keys:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch API keys' });
+    }
 });
 
-// Get usage statistics
-router.get('/stats', checkAdminAuth as RequestHandler, (req: Request, res: Response) => {
-    const stats = getUsageStats();
-
-    // Convert Maps to objects for JSON serialization
-    const endpointStats = {};
-    stats.endpointStats.forEach((value, key) => {
-        (endpointStats as Record<string, unknown>)[key] = value;
-    });
-
-    const ipStats = {};
-    stats.ipStats.forEach((value, key) => {
-        (ipStats as Record<string, unknown>)[key] = value;
-    });
-
-    res.json({
-        success: true,
-        data: {
-            totalRequests: stats.totalRequests,
-            endpointStats,
-            ipStats
-        }
-    });
+// Update the stats route
+router.get('/stats', checkAdminAuth as RequestHandler, async (req: Request, res: Response) => {
+    try {
+        const stats = await getUsageStats();
+        res.json({
+            success: true,
+            data: stats
+        });
+    } catch (err) {
+        logger.error('Error fetching usage stats:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch usage statistics' });
+    }
 });
 
 export default router;
