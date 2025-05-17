@@ -1,10 +1,17 @@
 import express, { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
+
 import CBERouter from './routes/verifyCBERoute';
 import telebirrRouter from './routes/verifyTelebirrRoute';
+import adminRouter from './routes/adminRoute';
 import logger from './utils/logger';
 import { verifyImageHandler } from "./services/verifyImage";
 import { requestLogger } from './middleware/requestLogger';
+import { apiKeyAuth } from './middleware/apiKeyAuth';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +27,12 @@ app.use(express.json());
 // Add request logging middleware
 app.use(requestLogger);
 
+// Register admin routes BEFORE API key authentication
+app.use('/admin', adminRouter);
+
+// Add API key authentication middleware (will not affect admin routes)
+app.use(apiKeyAuth as express.RequestHandler);
+
 // Error handling for JSON parsing - properly typed as an error handler
 const jsonErrorHandler: ErrorRequestHandler = async (err, req, res, next): Promise<void> => {
     if (err instanceof SyntaxError && 'body' in err) {
@@ -32,9 +45,11 @@ const jsonErrorHandler: ErrorRequestHandler = async (err, req, res, next): Promi
 
 app.use(jsonErrorHandler);
 
-// ✅ Attach router to this path
+// ✅ Attach routers to paths
 app.use('/verify-cbe', CBERouter);
 app.use('/verify-telebirr', telebirrRouter);
+// Remove this line since we already registered admin routes
+// app.use('/admin', adminRouter);
 
 // Fix: Apply middleware functions individually instead of spreading the array
 app.post("/verify-image", verifyImageHandler[0], verifyImageHandler[1]);
@@ -48,6 +63,10 @@ app.get('/', (req: Request, res: Response) => {
             "/verify-cbe",
             "/verify-telebirr",
             "/verify-image"
+        ],
+        adminEndpoints: [
+            "/admin/api-keys",
+            "/admin/stats"
         ],
         health: "/health",
         documentation: "https://github.com/Vixen878/verifier-api"
