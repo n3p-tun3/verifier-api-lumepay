@@ -222,18 +222,28 @@ export async function verifyTelebirr(reference: string): Promise<TelebirrReceipt
 
     if (!skipPrimary) {
         const primaryResult = await fetchFromPrimarySource(reference, primaryUrl);
-        if (primaryResult) return primaryResult;
+        if (primaryResult && isValidReceipt(primaryResult)) return primaryResult;
         logger.warn(`Primary Telebirr verification failed for reference: ${reference}. Trying fallback proxy...`);
     } else {
         logger.info(`Skipping primary verifier due to SKIP_PRIMARY_VERIFICATION=true`);
     }
 
     const fallbackResult = await fetchFromProxySource(reference, fallbackUrl);
-    if (fallbackResult) {
+    if (fallbackResult && isValidReceipt(fallbackResult)) {
         logger.info(`Successfully verified Telebirr receipt using fallback proxy for reference: ${reference}`);
         return fallbackResult;
     }
 
     logger.error(`Both primary and fallback Telebirr verification failed for reference: ${reference}`);
     return null;
+}
+
+// Add this helper function to validate receipt data
+function isValidReceipt(receipt: TelebirrReceipt): boolean {
+    // Check if essential fields have values
+    return Boolean(
+        receipt.receiptNo && 
+        receipt.payerName && 
+        receipt.transactionStatus
+    );
 }
