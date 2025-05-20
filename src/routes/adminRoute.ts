@@ -1,4 +1,4 @@
-import { Router, Request, Response, RequestHandler } from 'express';
+import { Router, Request, Response, RequestHandler, NextFunction } from 'express';
 import { generateApiKey, getApiKeys } from '../middleware/apiKeyAuth';
 import { getUsageStats } from '../middleware/requestLogger';
 import logger from '../utils/logger';
@@ -9,9 +9,9 @@ const router = Router();
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'change-this-secret-key';
 
 // Middleware to check admin authentication
-const checkAdminAuth = (req: Request, res: Response, next: Function) => {
+const checkAdminAuth = (req: Request, res: Response, next: NextFunction) => {
     const adminKey = req.headers['x-admin-key'] || req.query.adminKey;
-    
+
     if (adminKey !== ADMIN_SECRET) {
         return res.status(403).json({ success: false, error: 'Unauthorized admin access' });
     }
@@ -51,8 +51,15 @@ router.post('/api-keys', checkAdminAuth as RequestHandler, async (req: Request, 
 router.get('/api-keys', checkAdminAuth as RequestHandler, async (req: Request, res: Response) => {
     try {
         const apiKeys = await getApiKeys();
-        const keyList = apiKeys.map(key => ({
-            key: key.key.substring(0, 8) + '...',  // Only show first 8 chars for security
+        const keyList = apiKeys.map((key: {
+            key: string;
+            owner: string;
+            createdAt: Date;
+            lastUsed: Date | null;
+            usageCount: number;
+            isActive: boolean;
+        }) => ({
+            key: key.key.substring(0, 8) + '...',
             owner: key.owner,
             createdAt: key.createdAt,
             lastUsed: key.lastUsed,
