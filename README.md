@@ -117,6 +117,8 @@ pnpm start
 
 Verify a CBE payment using a reference number and account suffix.
 
+**Requires API Key**
+
 **Request Body:**
 
 ```json
@@ -134,6 +136,8 @@ Verify a CBE payment using a reference number and account suffix.
 
 Verify a Telebirr payment using a reference number.
 
+**Requires API Key**
+
 **Request Body:**
 
 ```json
@@ -148,6 +152,8 @@ Verify a Telebirr payment using a reference number.
 
 #### `POST /verify-image`
 
+**Requires API Key**
+
 Verify a payment by uploading an image of the receipt. This endpoint supports both CBE and Telebirr screenshots.
 
 **Request Body:**
@@ -159,11 +165,44 @@ Multipart form-data with an image file.
 
 ---
 
+## 🧪 Try It (Sample cURL Commands)
+
+### ✅ CBE
+
+```bash
+curl -X POST https://verifyapi.leulzenebe.pro/verify-cbe \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "reference": "FT2513001V2G", "accountSuffix": "39003377" }'
+```
+
+### ✅ Telebirr
+
+```bash
+curl -X POST https://verifyapi.leulzenebe.pro/verify-telebirr \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "reference": "CE2513001XYT" }'
+```
+
+### ✅ Image
+
+```bash
+curl -X POST https://verifyapi.leulzenebe.pro/verify-image?autoVerify=true \
+  -H "x-api-key: YOUR_API_KEY" \
+  -F "file=@yourfile.jpg" \
+  -F "suffix=39003377"
+```
+
+---
+
 ### ✅ Health Check
 
 #### `GET /health`
 
 Check if the API is running properly.
+
+**No API Key Required**
 
 **Response:**
 
@@ -193,6 +232,58 @@ Get information about the API and available endpoints.
   "documentation": "https://github.com/Vixen878/verifier-api"
 }
 ```
+
+---
+
+## 🔐 API Authentication `new`
+
+All verification endpoints require a valid API key.  
+Pass the key using either:
+
+- Header: `x-api-key: YOUR_API_KEY`
+- Query: `?apiKey=YOUR_API_KEY`
+
+To **generate an API key**, visit: [https://verify.leul.et](https://verify.leul.et)
+
+---
+
+## 📡 Public Endpoint Access
+
+Use your API key to call endpoints from:
+
+```
+https://verifyapi.leulzenebe.pro/[endpoint]
+```
+
+API Documentation: [https://verify.leul.et/docs](https://verify.leul.et/docs)
+
+---
+
+## 🛠 Admin Endpoints
+
+> Requires `x-admin-key` in header (from your environment config).
+
+### `POST /admin/api-keys`
+
+Generate a new API key.
+```json
+{
+  "owner": "your-identifier"
+}
+```
+
+### `GET /admin/api-keys`
+
+List existing API keys (masked view).
+
+### `GET /admin/stats`
+
+Retrieve usage statistics:
+- Request count by endpoint
+- Success/failure ratio
+- Average response time
+- Requests by IP
+
 
 ---
 
@@ -228,6 +319,22 @@ LOG_LEVEL=debug
 
 ---
 
+## 📦 Endpoint Summary
+
+| Method | Endpoint              | Auth | Description                        |
+|--------|-----------------------|------|------------------------------------|
+| POST   | `/verify-cbe`         | ✅    | CBE transaction by reference + suffix |
+| POST   | `/verify-telebirr`    | ✅    | Telebirr receipt by reference       |
+| POST   | `/verify-image`       | ✅    | Image upload for receipt OCR        |
+| GET    | `/health`             | ❌    | Health check                        |
+| GET    | `/`                   | ❌    | API metadata                        |
+| GET    | `/admin/stats`        | 🔐    | API usage stats                     |
+| GET    | `/admin/api-keys`     | 🔐    | List all API keys                   |
+| POST   | `/admin/api-keys`     | 🔐    | Generate API key                    |
+
+
+---
+
 ## 🧰 Technologies Used
 
 - Node.js with Express
@@ -236,7 +343,18 @@ LOG_LEVEL=debug
 - Cheerio – HTML parsing
 - Puppeteer – headless browser automation (used for CBE scraping)
 - Winston – structured logging
+- Prisma + MySQL (persistent storage)
 - Mistral AI – OCR for image-based verification
+
+---
+
+## 🛠 Prisma Integration
+
+- `apiKey` model stores API key, usage count, owner, timestamps.
+- `usageLog` model stores every request metadata:
+  - endpoint, method, status code, duration, IP, API key ID
+
+Stats are used for `/admin/stats` endpoint and dashboard monitoring.
 
 ---
 
