@@ -15,18 +15,18 @@ export const migrateApiKeys = async (inMemoryApiKeys: Map<string, any>) => {
         logger.info(`Backup of API keys created at ${backupPath}`);
 
         // Begin transaction
-        const results = await prisma.$transaction(async (prisma) => {
+        const results = await prisma.$transaction(async (tx) => {
             const migrationResults = [];
 
             for (const [key, data] of inMemoryApiKeys.entries()) {
                 // Check if key already exists in database
-                const existingKey = await prisma.apiKey.findUnique({
+                const existingKey = await tx.apiKey.findUnique({
                     where: { key }
                 });
 
                 if (!existingKey) {
                     // Create new key in database
-                    const newKey = await prisma.apiKey.create({
+                    const newKey = await tx.apiKey.create({
                         data: {
                             key,
                             owner: data.owner,
