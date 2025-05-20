@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import type { Prisma } from '@prisma/client';
 import logger from './logger';
 import fs from 'fs';
 import path from 'path';
@@ -15,7 +16,7 @@ export const migrateApiKeys = async (inMemoryApiKeys: Map<string, any>) => {
         logger.info(`Backup of API keys created at ${backupPath}`);
 
         // Begin transaction
-        const results = await prisma.$transaction(async (tx) => {
+        const results = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const migrationResults = [];
 
             for (const [key, data] of inMemoryApiKeys.entries()) {
