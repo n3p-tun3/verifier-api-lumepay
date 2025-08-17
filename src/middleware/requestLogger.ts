@@ -2,16 +2,30 @@ import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 import { prisma } from '../utils/prisma';
 
+// Define types for raw query results
+interface EndpointStat {
+  endpoint: string;
+  count: bigint;
+  successCount: bigint;
+  failureCount: bigint;
+  avgResponseTime: number;
+}
+
+interface IpStat {
+  ip: string;
+  count: bigint;
+}
+
 // In-memory cache for quick stats access
 const statsCache = {
   totalRequests: 0,
   endpointStats: new Map<string, {
-    count: number,
-    successCount: number,
-    failureCount: number,
-    avgResponseTime: number
+    count: number;
+    successCount: number;
+    failureCount: number;
+    avgResponseTime: number;
   }>(),
-  ipStats: new Map<string, number>()
+  ipStats: new Map<string, number>(),
 };
 
 // Initialize cache from database on startup
@@ -21,45 +35,49 @@ export const initializeStatsCache = async () => {
     statsCache.totalRequests = await prisma.usageLog.count();
     
     // Get endpoint stats
-    const endpointStats = await prisma.$queryRaw`
+    const endpointStats = await prisma.$queryRaw<EndpointStat[]>`
       SELECT 
         CONCAT(method, ' ', endpoint) as endpoint,
         COUNT(*) as count,
-        SUM(CASE WHEN statusCode < 400 THEN 1 ELSE 0 END) as successCount,
-        SUM(CASE WHEN statusCode >= 400 THEN 1 ELSE 0 END) as failureCount,
-        AVG(responseTime) as avgResponseTime
-      FROM UsageLog
+        SUM(CASE WHEN "statusCode" < 400 THEN 1 ELSE 0 END) as successCount,
+        SUM(CASE WHEN "statusCode" >= 400 THEN 1 ELSE 0 END) as failureCount,
+        AVG("responseTime") as avgResponseTime
+      FROM "UsageLog"
       GROUP BY method, endpoint
     `;
     
     // Populate cache
     if (Array.isArray(endpointStats)) {
-      endpointStats.forEach((stat: any) => {
+      endpointStats.forEach((stat) => {
         statsCache.endpointStats.set(stat.endpoint, {
           count: Number(stat.count),
           successCount: Number(stat.successCount),
           failureCount: Number(stat.failureCount),
-          avgResponseTime: Number(stat.avgResponseTime)
+          avgResponseTime: Number(stat.avgResponseTime),
         });
       });
     }
     
     // Get IP stats
-    const ipStats = await prisma.$queryRaw`
+    const ipStats = await prisma.$queryRaw<IpStat[]>`
       SELECT ip, COUNT(*) as count
-      FROM UsageLog
+      FROM "UsageLog"
       GROUP BY ip
     `;
     
     if (Array.isArray(ipStats)) {
-      ipStats.forEach((stat: any) => {
+      ipStats.forEach((stat) => {
         statsCache.ipStats.set(stat.ip, Number(stat.count));
       });
     }
     
     logger.info('Stats cache initialized from database');
-  } catch (error) {
-    logger.error('Error initializing stats cache:', error);
+  } catch (error: any) {
+    if (error.code === 'P2010' && error.meta?.code === '42P01') {
+      logger.warn('UsageLog table does not exist; skipping stats cache initialization');
+    } else {
+      logger.error('Error initializing stats cache:', error);
+    }
   }
 };
 
@@ -75,7 +93,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     userAgent: req.get('user-agent'),
     body: req.method === 'POST' ? JSON.stringify(req.body) : undefined,
     query: Object.keys(req.query).length ? req.query : undefined,
-    apiKey: (req as any).apiKeyData ? (req as any).apiKeyData.owner : 'none'
+    apiKey: (req as any).apiKeyData ? (req as any).apiKeyData.owner : 'none',
   });
   
   // Update in-memory cache for quick access
@@ -151,27 +169,27 @@ export const getUsageStats = async () => {
     // Try to get fresh data from database
     const totalLogs = await prisma.usageLog.count();
     
-    const endpointStats = await prisma.$queryRaw`
+    const endpointStats = await prisma.$queryRaw<EndpointStat[]>`
       SELECT 
         CONCAT(method, ' ', endpoint) as endpoint,
         COUNT(*) as count,
-        SUM(CASE WHEN statusCode < 400 THEN 1 ELSE 0 END) as successCount,
-        SUM(CASE WHEN statusCode >= 400 THEN 1 ELSE 0 END) as failureCount,
-        AVG(responseTime) as avgResponseTime
-      FROM UsageLog
+        SUM(CASE WHEN "statusCode" < 400 THEN 1 ELSE 0 END) as successCount,
+        SUM(CASE WHEN "statusCode" >= 400 THEN 1 ELSE 0 END) as failureCount,
+        AVG("responseTime") as avgResponseTime
+      FROM "UsageLog"
       GROUP BY method, endpoint
     `;
     
-    const ipStats = await prisma.$queryRaw`
+    const ipStats = await prisma.$queryRaw<IpStat[]>`
       SELECT ip, COUNT(*) as count
-      FROM UsageLog
+      FROM "UsageLog"
       GROUP BY ip
     `;
     
     // Convert raw results to proper format
     const formattedEndpointStats: Record<string, any> = {};
     if (Array.isArray(endpointStats)) {
-      endpointStats.forEach((stat: any) => {
+      endpointStats.forEach((stat) => {
         formattedEndpointStats[stat.endpoint] = {
           count: Number(stat.count),
           successCount: Number(stat.successCount),
@@ -183,7 +201,7 @@ export const getUsageStats = async () => {
     
     const formattedIpStats: Record<string, number> = {};
     if (Array.isArray(ipStats)) {
-      ipStats.forEach((stat: any) => {
+      ipStats.forEach((stat) => {
         formattedIpStats[stat.ip] = Number(stat.count);
       });
     }
@@ -193,7 +211,7 @@ export const getUsageStats = async () => {
       endpointStats: formattedEndpointStats,
       ipStats: formattedIpStats
     };
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Error fetching usage stats from database:', error);
     
     // Fallback to in-memory cache if database query fails

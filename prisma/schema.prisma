@@ -9,7 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -50,7 +50,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   ApiKey        ApiKey[]
-  role          Role          @default(USER)
+  role          Role      @default(USER)
 }
 
 enum Role {
@@ -67,16 +67,17 @@ model VerificationToken {
 }
 
 model ApiKey {
-  id         String     @id @default(uuid())
-  key        String     @unique
-  owner      String
-  createdAt  DateTime   @default(now())
-  lastUsed   DateTime?
-  usageCount Int        @default(0)
-  isActive   Boolean    @default(true)
-  UsageLog   UsageLog[]
-  User       User?      @relation(fields: [userId], references: [id])
-  userId     String?
+  id           String        @id @default(uuid())
+  key          String        @unique
+  owner        String
+  createdAt    DateTime      @default(now())
+  lastUsed     DateTime?
+  usageCount   Int           @default(0)
+  isActive     Boolean       @default(true)
+  UsageLog     UsageLog[]
+  User         User?         @relation(fields: [userId], references: [id])
+  userId       String?
+  PaymentIntent PaymentIntent[]
 
   @@index([key])
   @@index([userId])
@@ -96,4 +97,23 @@ model UsageLog {
   @@index([apiKeyId])
   @@index([endpoint])
   @@index([createdAt])
+}
+
+model PaymentIntent {
+  id                String   @id @default(uuid())
+  amount            Float
+  merchant          String
+  paymentMethodType String
+  metadata          Json?
+  status            String   @default("pending")
+  expiresAt         DateTime
+  idempotencyKey    String   @unique
+  createdAt         DateTime @default(now())
+  confirmedAt       DateTime?
+  verificationDetails Json?
+  apiKeyId          String
+  apiKey            ApiKey   @relation(fields: [apiKeyId], references: [id])
+
+  @@index([apiKeyId])
+  @@index([merchant])
 }

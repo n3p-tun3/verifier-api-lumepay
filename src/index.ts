@@ -8,6 +8,7 @@ dotenv.config();
 import CBERouter from './routes/verifyCBERoute';
 import telebirrRouter from './routes/verifyTelebirrRoute';
 import adminRouter from './routes/adminRoute';
+import paymentIntentsRouter from './routes/paymentIntentsRoute';
 import logger from './utils/logger';
 import { verifyImageHandler } from "./services/verifyImage";
 import { requestLogger, initializeStatsCache } from './middleware/requestLogger';
@@ -65,6 +66,7 @@ app.use(jsonErrorHandler);
 app.use('/verify-cbe', CBERouter);
 app.use('/verify-telebirr', telebirrRouter);
 app.post('/verify-image', verifyImageHandler);
+app.use('/intents', paymentIntentsRouter);
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
