@@ -140,7 +140,7 @@ router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<v
     let verificationResult: VerifyResult | TelebirrReceipt | null;
     if (intent.paymentMethodType === 'CBE') {
       // For CBE, use the expected receiver account (suffix) to query
-      verificationResult = await verifyCBE(reference, intent.expectedReceiverAccount);
+      verificationResult = await verifyCBE(reference, intent.expectedReceiverAccount.slice(-8));
     } else if (intent.paymentMethodType === 'Telebirr') {
       verificationResult = await verifyTelebirr(reference);
     } else {
@@ -162,10 +162,12 @@ router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<v
       } else {
         // Verify receiver name and account
         const receiverNameMatch = cbeResult.receiver?.toLowerCase() === intent.expectedReceiverName?.toLowerCase();
-        const receiverAccountMatch = cbeResult.receiverAccount?.endsWith(intent.expectedReceiverAccount);
+        const receiverAccountMatch = cbeResult.receiverAccount?.endsWith(intent.expectedReceiverAccount.slice(-4));
         
         if (!receiverNameMatch || !receiverAccountMatch) {
           verificationError = 'Receiver verification failed - name or account mismatch';
+          console.log(cbeResult.receiver, intent.expectedReceiverName, receiverNameMatch);
+          console.log(cbeResult.receiverAccount, intent.expectedReceiverAccount, receiverAccountMatch);
         } else {
           verificationPassed = true;
         }
