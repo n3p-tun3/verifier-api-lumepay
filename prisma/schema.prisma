@@ -102,6 +102,7 @@ model UsageLog {
 model PaymentIntent {
   id                String   @id @default(uuid())
   amount            Float
+  
   merchant          String
   paymentMethodType String
   metadata          Json?
@@ -113,6 +114,8 @@ model PaymentIntent {
   verificationDetails Json?
   apiKeyId          String
   apiKey            ApiKey   @relation(fields: [apiKeyId], references: [id])
+  expectedReceiverAccount String   // Merchant's account suffix (CBE) or account no (Telebirr)
+  expectedReceiverName    String?  // Merchant's name (CBE: receiver, Telebirr: creditedPartyName)
 
   @@index([apiKeyId])
   @@index([merchant])

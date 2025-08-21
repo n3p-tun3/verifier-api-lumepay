@@ -1,5 +1,4 @@
-import { Router, Request, Response, RequestHandler } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
@@ -8,12 +7,51 @@ import { verifyTelebirr, TelebirrReceipt } from '../services/verifyTelebirr';
 import { AppError, ErrorType, sendErrorResponse } from '../utils/errorHandler';
 import { prisma } from '../utils/prisma';
 
-// Extend Request interface to include apiKeyData from apiKeyAuth middleware
+// // Interfaces with index signature for Prisma JSON compatibility
+// interface VerifyResult {
+//   success: boolean;
+//   payer?: string;
+//   payerAccount?: string;
+//   receiver?: string;
+//   receiverAccount?: string;
+//   amount?: number;
+//   date?: string;
+//   reference?: string;
+//   reason?: string;
+//   [key: string]: any;
+// }
+
+// interface TelebirrReceipt {
+//   success: boolean;
+//   data: {
+//     payerName?: string;
+//     payerTelebirrNo?: string;
+//     creditedPartyName?: string;
+//     creditedPartyAccountNo?: string;
+//     transactionStatus: string;
+//     receiptNo?: string;
+//     paymentDate?: string;
+//     settledAmount?: string;
+//     serviceFee?: string;
+//     serviceFeeVAT?: string;
+//     totalPaidAmount?: string;
+//     [key: string]: any;
+//   };
+//   [key: string]: any;
+// }
+
+// Type guard to check if result is TelebirrReceipt
+function isTelebirrReceipt(result: VerifyResult | TelebirrReceipt | null): result is TelebirrReceipt {
+  return result != null && 'data' in result && 'transactionStatus' in result.data;
+}
+
+// Extend Request interface
 interface CustomRequest extends Request {
   apiKeyData?: { id: string; key: string; owner: string };
 }
 
 const router = Router();
+
 const createIntentSchema = z.object({
   amount: z.number().positive(),
   currency: z.string().min(3).max(3).default('ETB'),
@@ -21,11 +59,12 @@ const createIntentSchema = z.object({
   paymentMethodType: z.enum(['CBE', 'Telebirr']),
   metadata: z.record(z.string(), z.string()).optional(),
   idempotencyKey: z.string().uuid().optional(),
+  expectedReceiverAccount: z.string().min(1),
+  expectedReceiverName: z.string().min(1).optional(),
 });
 
 const confirmIntentSchema = z.object({
   reference: z.string().min(1),
-  accountSuffix: z.string().optional(),
 });
 
 const validateIntentOwner = (req: CustomRequest, merchant: string) => {
@@ -42,7 +81,7 @@ const validateIntentOwner = (req: CustomRequest, merchant: string) => {
 router.post('/', async (req: CustomRequest, res: Response): Promise<void> => {
   try {
     const parsed = createIntentSchema.parse(req.body);
-    const { amount, currency, merchant, paymentMethodType, metadata, idempotencyKey } = parsed;
+    const { amount, currency, merchant, paymentMethodType, metadata, idempotencyKey, expectedReceiverAccount, expectedReceiverName } = parsed;
 
     validateIntentOwner(req, merchant);
 
@@ -69,6 +108,8 @@ router.post('/', async (req: CustomRequest, res: Response): Promise<void> => {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         idempotencyKey: idempotencyKey || uuidv4(),
         apiKeyId: req.apiKeyData!.id,
+        expectedReceiverAccount,
+        expectedReceiverName,
       },
     });
 
@@ -103,7 +144,7 @@ router.get('/:id', async (req: CustomRequest, res: Response): Promise<void> => {
 router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<void> => {
   try {
     const parsed = confirmIntentSchema.parse(req.body);
-    const { reference, accountSuffix } = parsed;
+    const { reference } = parsed;
 
     const intent = await prisma.paymentIntent.findUnique({
       where: { id: req.params.id },
@@ -126,13 +167,56 @@ router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<v
     }
 
     let verificationResult: VerifyResult | TelebirrReceipt | null;
+    let status: 'succeeded' | 'failed';
+
     if (intent.paymentMethodType === 'CBE') {
-      if (!accountSuffix) {
-        throw new AppError('Account suffix required for CBE verification', ErrorType.VALIDATION, 400);
+      if (!intent.expectedReceiverAccount) {
+        throw new AppError('Expected receiver account not set for CBE intent', ErrorType.VALIDATION, 400);
       }
-      verificationResult = await verifyCBE(reference, accountSuffix);
+      verificationResult = await verifyCBE(reference, intent.expectedReceiverAccount);
+      if (!verificationResult || !verificationResult.success) {
+        status = 'failed';
+      } else {
+        // Validate CBE fields
+        if (!verificationResult.receiverAccount?.endsWith(intent.expectedReceiverAccount)) {
+          throw new AppError('Receiver account mismatch', ErrorType.VALIDATION, 400);
+        }
+        if (intent.expectedReceiverName && verificationResult.receiver !== intent.expectedReceiverName) {
+          throw new AppError('Receiver name mismatch', ErrorType.VALIDATION, 400);
+        }
+        if (verificationResult.date && new Date(verificationResult.date) < new Date(intent.createdAt)) {
+          throw new AppError('Transaction date is before intent creation', ErrorType.VALIDATION, 400);
+        }
+        if (verificationResult.amount !== intent.amount) {
+          throw new AppError(`Verified amount (${verificationResult.amount}) does not match intent amount (${intent.amount})`, ErrorType.VALIDATION, 400);
+        }
+        status = 'succeeded';
+      }
     } else if (intent.paymentMethodType === 'Telebirr') {
+      if (!intent.expectedReceiverAccount) {
+        throw new AppError('Expected receiver account not set for Telebirr intent', ErrorType.VALIDATION, 400);
+      }
       verificationResult = await verifyTelebirr(reference);
+      if (!verificationResult || !isTelebirrReceipt(verificationResult) || verificationResult.data.transactionStatus.toLowerCase() !== 'success') {
+        status = 'failed';
+      } else {
+        // Validate Telebirr fields
+        const lastFourDigits = intent.expectedReceiverAccount.slice(-4);
+        if (!verificationResult.data.creditedPartyAccountNo?.endsWith(lastFourDigits)) {
+          throw new AppError('Credited party account mismatch', ErrorType.VALIDATION, 400);
+        }
+        if (intent.expectedReceiverName && verificationResult.data.creditedPartyName !== intent.expectedReceiverName) {
+          throw new AppError('Credited party name mismatch', ErrorType.VALIDATION, 400);
+        }
+        if (verificationResult.data.paymentDate && new Date(verificationResult.data.paymentDate) < new Date(intent.createdAt)) {
+          throw new AppError('Payment date is before intent creation', ErrorType.VALIDATION, 400);
+        }
+        const verifiedAmount = parseFloat(verificationResult.data.settledAmount?.replace(/[^0-9.]/g, '') || '0');
+        if (verifiedAmount !== intent.amount) {
+          throw new AppError(`Verified amount (${verifiedAmount}) does not match intent amount (${intent.amount})`, ErrorType.VALIDATION, 400);
+        }
+        status = 'succeeded';
+      }
     } else {
       throw new AppError('Unsupported payment method', ErrorType.VALIDATION, 400);
     }
@@ -141,27 +225,11 @@ router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<v
       throw new AppError('Verification failed', ErrorType.VALIDATION, 400);
     }
 
-    const status = ('success' in verificationResult && verificationResult.success) || 
-                   ('transactionStatus' in verificationResult && verificationResult.transactionStatus.toLowerCase() === 'success') 
-                   ? 'succeeded' : 'failed';
-    
-    const verifiedAmount = 'amount' in verificationResult ? verificationResult.amount :
-                         'settledAmount' in verificationResult ? parseFloat(verificationResult.settledAmount.replace(/[^0-9.]/g, '')) :
-                         undefined;
-
-    if (status === 'succeeded' && verifiedAmount !== intent.amount) {
-      await prisma.paymentIntent.update({
-        where: { id: intent.id },
-        data: { status: 'failed', verificationDetails: { error: 'Amount mismatch' } },
-      });
-      throw new AppError(`Verified amount (${verifiedAmount}) does not match intent amount (${intent.amount})`, ErrorType.VALIDATION, 400);
-    }
-
     const updatedIntent = await prisma.paymentIntent.update({
       where: { id: intent.id },
       data: {
         status,
-        verificationDetails: JSON.stringify(verificationResult),
+        verificationDetails: verificationResult as any, // Type assertion for Prisma
         confirmedAt: status === 'succeeded' ? new Date() : undefined,
       },
     });
