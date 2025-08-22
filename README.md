@@ -263,18 +263,6 @@ LumePay uses Prisma ORM with PostgreSQL. Key models include:
 - `ApiKey`: Merchant API key management
 - `UsageLog`: Request tracking and analytics
 
-### Testing
-
-```bash
-# Run tests
-pnpm test
-
-# Run with coverage
-pnpm test:coverage
-
-# Run specific test suite
-pnpm test:unit
-```
 
 ## Deployment
 
