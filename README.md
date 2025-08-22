@@ -1,372 +1,389 @@
-# 📄 Payment Verification API
+# LumePay - Payment Gateway
 
-This API provides verification services for payment transactions made through **Commercial Bank of Ethiopia (CBE)** and **Telebirr** mobile payment platforms in Ethiopia.  
-It allows applications to verify the authenticity and details of payment receipts by reference numbers or uploaded images.
+A modern payment gateway supporting Commercial Bank of Ethiopia (CBE) and Telebirr mobile money payments. LumePay provides secure payment processing, real-time verification, and comprehensive merchant tools.
 
-> ⚠️ **Disclaimer**: This is **not an official API**. I am **not affiliated with Ethio Telecom, Telebirr, or Commercial Bank of Ethiopia (CBE)**. This tool is built for personal and developer utility purposes only and scrapes publicly available data.
+## Overview
 
----
+LumePay transforms how businesses handle digital payments. Built on a foundation of secure payment verification, it offers a complete payment gateway solution that integrates seamlessly with existing financial infrastructure.
 
-## ✅ Features
+> **Disclaimer**: This is **not an official API**. We are **not affiliated with Ethio Telecom, Telebirr, or Commercial Bank of Ethiopia (CBE)**. This tool is built for personal and developer utility purposes only and scrapes publicly available data.
 
-### 🔷 CBE Payment Verification
+### Key Features
 
-- Verifies CBE bank transfers using reference number and account suffix
-- Extracts key payment details:
-  - Payer name and account
-  - Receiver name and account
-  - Transaction amount
-  - Payment date and time
-  - Reference number
-  - Payment description/reason
+- **Multi-Payment Support**: CBE bank transfers and Telebirr mobile money
+- **Payment Intents**: Stripe-like payment intent system with secure verification
+- **Real-time Webhooks**: Instant payment status notifications
+- **Merchant Management**: Comprehensive API key and subscription management
+- **Security First**: Built-in fraud prevention and verification systems
+- **Developer Friendly**: RESTful API with comprehensive documentation
 
-### 🔶 Telebirr Payment Verification
+## Architecture
 
-- Verifies Telebirr mobile money transfers using a reference number
-- Extracts key transaction details:
-  - Payer name and Telebirr number
-  - Credited party name and account
-  - Transaction status
-  - Receipt number
-  - Payment date
-  - Settled amount
-  - Service fees and VAT
-  - Total paid amount
+LumePay operates as a post-payment verification system, ensuring security by verifying actual bank and mobile money transactions rather than initiating charges. This approach provides:
 
-### 🔷 Image-based Payment Verification
+- **Enhanced Security**: No direct access to customer funds
+- **Compliance**: Works within existing financial regulations
+- **Reliability**: Leverages proven banking infrastructure
+- **Transparency**: Full audit trail of all payment verifications
 
-- Verifies payments by analyzing uploaded receipt images
-- Uses **Mistral AI** to detect receipt type and extract transaction details
-- Supports both **CBE** and **Telebirr** receipt screenshots
+### What We've Built
 
----
+- **Payment Intent System**: Stripe-like payment intents with secure verification
+- **Real-time Webhooks**: Instant payment status notifications to merchants
+- **Multi-payment Support**: CBE bank transfers and Telebirr mobile money
+- **Merchant Management**: API key management and usage tracking
+- **Security Features**: Fraud prevention, merchant verification, and reference deduplication
 
-## 🌐 Hosting Limitations for `verify-telebirr`
+## Hosting Considerations
 
-Due to **regional restrictions** by the Telebirr system, hosting the `verify-telebirr` endpoint outside of Ethiopia (e.g., on a VPS like Hetzner or AWS) may result in failed receipt verification. Specifically:
+Due to regional restrictions by the Telebirr system, hosting the `verify-telebirr` endpoint outside of Ethiopia may result in failed receipt verification. Specifically:
 
-- Telebirr’s receipt pages (`https://transactioninfo.ethiotelecom.et/receipt/[REFERENCE]`) often **block or timeout** requests made from foreign IP addresses.
-- This results in errors such as `ERR_FAILED`, `403`, or DNS resolution failures.
+- Telebirr's receipt pages often block or timeout requests made from foreign IP addresses
+- This results in errors such as `ERR_FAILED`, `403`, or DNS resolution failures
 
-### ❌ Affected:
+**Affected**: VPS or cloud servers located outside Ethiopia  
+**Works Best**: Ethiopian-hosted servers or local development infrastructure
 
-- VPS or cloud servers located outside Ethiopia
+## Payment Methods
 
-### ✅ Works Best On:
+### CBE Bank Transfers
 
-- Ethiopian-hosted servers (e.g., Ethio Telecom web hosting, TeleCloud VPS)
-- Developers self-hosting the code on infrastructure based in Ethiopia
+Verify Commercial Bank of Ethiopia transfers using reference numbers and account suffixes. LumePay extracts comprehensive transaction details including:
 
-#### 🛠 Proxy Support:
+- Payer and receiver information
+- Transaction amounts and dates
+- Payment references and descriptions
+- Account verification
 
-This project includes a secondary Telebirr verification relay hosted inside Ethiopia. When the primary `verify-telebirr` fetch fails on your foreign VPS, the server can **fallback to our proxy** to complete the verification.
+### Telebirr Mobile Money
 
-For best results and full control, clone the repository and **self-host from inside Ethiopia**.
+Process Telebirr mobile money payments with automatic receipt verification. Features include:
 
----
+- Transaction status verification
+- Amount and fee breakdown
+- Receipt number tracking
+- Payer identification
 
-### 🔁 Skip Primary Verifier (For VPS Users)
+## API Endpoints
 
-If you know your environment cannot access the primary endpoint, set the following in your `.env`:
+### Core Payment Operations
 
-```env
-SKIP_PRIMARY_VERIFICATION=true
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/intents` | POST | Create payment intent |
+| `/intents/:id` | GET | Retrieve payment intent |
+| `/intents/:id/confirm` | POST | Confirm payment with reference |
 
-This will skip the primary Telebirr receipt fetch entirely and go straight to the fallback proxy — only for your local use case. Other users can still benefit from both layers.
+### Verification Services
 
----
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/verify-cbe` | POST | Verify CBE bank transfer |
+| `/verify-telebirr` | POST | Verify Telebirr payment |
+| `/verify-image` | POST | OCR-based receipt verification |
 
-## ⚙️ Installation
+### Webhook Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/webhooks` | POST | Create webhook subscription |
+| `/webhooks` | GET | List webhook subscriptions |
+| `/webhooks/:id` | PUT | Update webhook subscription |
+| `/webhooks/:id` | DELETE | Remove webhook subscription |
+
+### Administrative
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/api-keys` | POST | Generate API keys |
+| `/admin/stats` | GET | View usage statistics |
+| `/health` | GET | System health check |
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- PostgreSQL database
+- Mistral AI API key (for image verification)
+
+### Deployment
+
+LumePay is designed to be self-hosted. After deployment, you'll have your own payment gateway running on your infrastructure, accessible at your domain or localhost for development.
+
+### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/Vixen878/verifier-api
-
-# Navigate to the project directory
-cd verifier-api
+git clone https://github.com/n3p-tun3/verifier-api-lumepay
+cd verifier-api-lumepay
 
 # Install dependencies
 pnpm install
-```
 
----
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
 
-## 🧪 Usage
+# Run database migrations
+npx prisma migrate dev
 
-### 🛠 Development
-
-```bash
+# Start development server
 pnpm dev
 ```
 
-### 🚀 Production Build
-
-```bash
-pnpm build
-pnpm start
-```
-
----
-
-## 📡 API Endpoints
-
-### ✅ CBE Verification
-
-#### `POST /verify-cbe`
-
-Verify a CBE payment using a reference number and account suffix.
-
-**Requires API Key**
-
-**Request Body:**
-
-```json
-{
-  "reference": "REFERENCE_NUMBER",
-  "accountSuffix": "ACCOUNT_SUFFIX"
-}
-```
-
----
-
-### ✅ Telebirr Verification
-
-#### `POST /verify-telebirr`
-
-Verify a Telebirr payment using a reference number.
-
-**Requires API Key**
-
-**Request Body:**
-
-```json
-{
-  "reference": "REFERENCE_NUMBER"
-}
-```
-
----
-
-### ✅ Image Verification
-
-#### `POST /verify-image`
-
-**Requires API Key**
-
-Verify a payment by uploading an image of the receipt. This endpoint supports both CBE and Telebirr screenshots.
-
-**Request Body:**
-Multipart form-data with an image file.
-
-- Optional Query Param: `?autoVerify=true`  
-  When enabled, the system detects the receipt type and routes it to the correct verification flow automatically.
-- **Note**: If the auto-detected receipt is from CBE, the request **must** include your `Suffix` (last 8 digits of your account).
-
----
-
-## 🧪 Try It (Sample cURL Commands)
-
-### ✅ CBE
-
-```bash
-curl -X POST https://verifyapi.leulzenebe.pro/verify-cbe \
-  -H "x-api-key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "reference": "FT2513001V2G", "accountSuffix": "39003377" }'
-```
-
-### ✅ Telebirr
-
-```bash
-curl -X POST https://verifyapi.leulzenebe.pro/verify-telebirr \
-  -H "x-api-key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "reference": "CE2513001XYT" }'
-```
-
-### ✅ Image
-
-```bash
-curl -X POST https://verifyapi.leulzenebe.pro/verify-image?autoVerify=true \
-  -H "x-api-key: YOUR_API_KEY" \
-  -F "file=@yourfile.jpg" \
-  -F "suffix=39003377"
-```
-
----
-
-### ✅ Health Check
-
-#### `GET /health`
-
-Check if the API is running properly.
-
-**No API Key Required**
-
-**Response:**
-
-```json
-{
-  "status": "ok",
-  "timestamp": "2023-06-15T12:34:56.789Z"
-}
-```
-
----
-
-### ✅ API Information
-
-#### `GET /`
-
-Get information about the API and available endpoints.
-
-**Response:**
-
-```json
-{
-  "message": "Verifier API is running",
-  "version": "1.0.0",
-  "endpoints": ["/verify-cbe", "/verify-telebirr", "/verify-image"],
-  "health": "/health",
-  "documentation": "https://github.com/Vixen878/verifier-api"
-}
-```
-
----
-
-## 🔐 API Authentication `new`
-
-All verification endpoints require a valid API key.  
-Pass the key using either:
-
-- Header: `x-api-key: YOUR_API_KEY`
-- Query: `?apiKey=YOUR_API_KEY`
-
-To **generate an API key**, visit: [https://verify.leul.et](https://verify.leul.et)
-
----
-
-## 📡 Public Endpoint Access
-
-Use your API key to call endpoints from:
-
-```
-https://verifyapi.leulzenebe.pro/[endpoint]
-```
-
-API Documentation: [https://verify.leul.et/docs](https://verify.leul.et/docs)
-
----
-
-## 🛠 Admin Endpoints
-
-> Requires `x-admin-key` in header (from your environment config).
-
-### `POST /admin/api-keys`
-
-Generate a new API key.
-```json
-{
-  "owner": "your-identifier"
-}
-```
-
-### `GET /admin/api-keys`
-
-List existing API keys (masked view).
-
-### `GET /admin/stats`
-
-Retrieve usage statistics:
-- Request count by endpoint
-- Success/failure ratio
-- Average response time
-- Requests by IP
-
-
----
-
-## 🔐 Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
+### Environment Configuration
 
 ```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/lumepay"
+
+# API Configuration
 PORT=3001
-NODE_ENV=development # or production
-LOG_LEVEL=info       # or debug, error
-MISTRAL_API_KEY=your_mistral_api_key # Required for image verification
-SKIP_PRIMARY_VERIFICATION=false      # Set to true to bypass primary fetch
+NODE_ENV=development
+
+# External Services
+MISTRAL_API_KEY=your_mistral_api_key
+
+# Admin Access
+ADMIN_SECRET=your_admin_secret_key
 ```
 
-You can get an API key for Mistral AI from [https://mistral.ai/](https://mistral.ai/)
+## Usage Examples
 
----
+### Creating a Payment Intent
 
-## 📝 Logging
-
-- Uses [`winston`](https://github.com/winstonjs/winston) for structured logging.
-- Log files are stored under the `logs/` directory:
-  - `logs/error.log` – error-level logs
-  - `logs/combined.log` – all logs including debug/info
-- `debug` logs are **only visible in development** mode (`NODE_ENV !== 'production'`).
-
-To override log level manually:
-
-```env
-LOG_LEVEL=debug
+```bash
+curl -X POST http://localhost:3001/intents \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 1000,
+    "merchant": "your-business",
+    "paymentMethodType": "CBE",
+    "expectedReceiverAccount": "12345678",
+    "expectedReceiverName": "Your Business Name"
+  }'
 ```
 
+### Confirming a Payment
+
+```bash
+curl -X POST http://localhost:3001/intents/INTENT_ID/confirm \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reference": "FT2513001V2G"
+  }'
+```
+
+### Setting Up Webhooks
+
+```bash
+curl -X POST http://localhost:3001/webhooks \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-domain.com/webhooks",
+    "events": ["payment_intent.confirmed", "payment_intent.failed"]
+  }'
+```
+
+## Webhook Integration
+
+LumePay provides real-time payment notifications through webhooks. Configure webhook endpoints to receive instant updates on:
+
+- Payment intent creation
+- Successful payment confirmations
+- Failed payment attempts
+- Payment expirations
+
+### Webhook Security
+
+All webhooks include HMAC-SHA256 signatures for verification. Implement signature validation in your webhook handlers:
+
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhookSignature(payload, signature, secret) {
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature.replace('sha256=', '')),
+    Buffer.from(expectedSignature)
+  );
+}
+```
+
+## Security Features
+
+### API Key Management
+
+- Unique API keys per merchant
+- Usage tracking and monitoring
+- Automatic rate limiting
+- Secure key generation
+
+### Payment Verification
+
+- Multi-layer verification system
+- Merchant identity validation
+- Amount matching verification
+- Reference deduplication
+
+### Data Protection
+
+- Encrypted webhook secrets
+- Secure database connections
+- Audit logging for all operations
+- Merchant data isolation
+
+## Development
+
+### Project Structure
+
+```
+src/
+├── routes/           # API route handlers
+├── services/         # Business logic services
+├── middleware/       # Express middleware
+├── utils/            # Utility functions
+└── types/            # TypeScript type definitions
+```
+
+### Database Schema
+
+LumePay uses Prisma ORM with PostgreSQL. Key models include:
+
+- `PaymentIntent`: Payment intent management
+- `WebhookSubscription`: Webhook configuration
+- `ApiKey`: Merchant API key management
+- `UsageLog`: Request tracking and analytics
+
+### Testing
+
+```bash
+# Run tests
+pnpm test
+
+# Run with coverage
+pnpm test:coverage
+
+# Run specific test suite
+pnpm test:unit
+```
+
+## Deployment
+
+### Production Setup
+
+```bash
+# Build the application
+pnpm build
+
+# Start production server
+pnpm start
+
+# Run database migrations
+npx prisma migrate deploy
+```
+
+### Docker Deployment
+
+```bash
+# Build Docker image
+docker build -t lumepay .
+
+# Run container
+docker run -p 3001:3001 --env-file .env lumepay
+```
+
+### Environment Variables
+
+Ensure all required environment variables are set in production:
+
+- `DATABASE_URL`: Production PostgreSQL connection
+- `NODE_ENV=production`
+- `ADMIN_SECRET`: Strong admin authentication key
+- `MISTRAL_API_KEY`: Valid Mistral AI API key
+
+## Monitoring and Analytics
+
+### Built-in Monitoring
+
+- Request logging with Winston
+- Performance metrics tracking
+- Error monitoring and alerting
+- Webhook delivery status tracking
+
+### Health Checks
+
+- Database connectivity monitoring
+- External service status checks
+- System resource monitoring
+- Automated alerting
+
+## Contributing
+
+We welcome contributions to LumePay. Please read our contributing guidelines and ensure all code follows our standards.
+
+### Development Setup
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+### Code Standards
+
+- TypeScript for type safety
+- ESLint for code quality
+- Prettier for formatting
+- Comprehensive error handling
+- Detailed logging
+
+## License
+
+LumePay is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Support
+
+### Documentation
+
+- [API Reference](README.md)
+- [Integration Guides](README.md#usage-examples)
+- [Webhook Documentation](WEBHOOK_README.md)
+
+### Community
+
+- [GitHub Issues](https://github.com/n3p-tun3/verifier-api-lumepay/issues)
+- [Discussions](https://github.com/n3p-tun3/verifier-api-lumepay/discussions)
+
+## Roadmap
+
+### Upcoming Features
+
+- Subscription management system
+- Advanced analytics dashboard
+- Multi-currency support
+- Enhanced fraud detection
+- Mobile SDKs
+
+### Long-term Vision
+
+- International payment support
+- Advanced merchant tools
+- AI-powered fraud prevention
+- Comprehensive reporting suite
+
+## Acknowledgments
+
+LumePay builds upon the foundation of open-source payment verification technology, adapted and enhanced for the Ethiopian market. Special thanks to the open-source community and early adopters who have helped shape this platform.
+
 ---
 
-## 📦 Endpoint Summary
-
-| Method | Endpoint              | Auth | Description                        |
-|--------|-----------------------|------|------------------------------------|
-| POST   | `/verify-cbe`         | ✅    | CBE transaction by reference + suffix |
-| POST   | `/verify-telebirr`    | ✅    | Telebirr receipt by reference       |
-| POST   | `/verify-image`       | ✅    | Image upload for receipt OCR        |
-| GET    | `/health`             | ❌    | Health check                        |
-| GET    | `/`                   | ❌    | API metadata                        |
-| GET    | `/admin/stats`        | 🔐    | API usage stats                     |
-| GET    | `/admin/api-keys`     | 🔐    | List all API keys                   |
-| POST   | `/admin/api-keys`     | 🔐    | Generate API key                    |
-
-
----
-
-## 🧰 Technologies Used
-
-- Node.js with Express
-- TypeScript
-- Axios – HTTP requests
-- Cheerio – HTML parsing
-- Puppeteer – headless browser automation (used for CBE scraping)
-- Winston – structured logging
-- Prisma + MySQL (persistent storage)
-- Mistral AI – OCR for image-based verification
-
----
-
-## 🛠 Prisma Integration
-
-- `apiKey` model stores API key, usage count, owner, timestamps.
-- `usageLog` model stores every request metadata:
-  - endpoint, method, status code, duration, IP, API key ID
-
-Stats are used for `/admin/stats` endpoint and dashboard monitoring.
-
----
-
-## 📄 License
-
-MIT License — see the [LICENSE](./LICENSE) file for details.
-
----
-
-## 👤 Maintainer
-
-**Leul Zenebe**  
-Creofam LLC  
-🌐 [creofam.com](https://creofam.com)  
-🌐 [Personal Site](https://leulzenebe.pro)
+**LumePay** - Empowering businesses with modern payment solutions.

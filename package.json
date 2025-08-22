@@ -1,7 +1,7 @@
 {
-  "name": "cbe-verifier-api",
-  "version": "1.1.1",
-  "description": "",
+  "name": "lumepay",
+  "version": "1.0.0",
+  "description": "A modern payment gateway built specifically for the Ethiopian market, supporting CBE and Telebirr payments",
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --watch src --exec ts-node src/index.ts",

@@ -7,6 +7,7 @@ import { verifyCBE, VerifyResult } from '../services/verifyCBE';
 import { verifyTelebirr, TelebirrReceipt } from '../services/verifyTelebirr';
 import { AppError, ErrorType, sendErrorResponse } from '../utils/errorHandler';
 import { prisma } from '../utils/prisma';
+import { WebhookService } from '../services/webhookService';
 
 // Extend Request interface to include apiKeyData from apiKeyAuth middleware
 interface CustomRequest extends Request {
@@ -74,6 +75,20 @@ router.post('/', async (req: CustomRequest, res: Response): Promise<void> => {
     });
 
     logger.info(`Created payment intent ${intent.id} for merchant ${merchant}`);
+    
+    // Send webhook for payment intent creation
+    WebhookService.sendWebhookToMerchant(merchant, 'payment_intent.created', {
+      id: intent.id,
+      amount: intent.amount,
+      merchant: intent.merchant,
+      paymentMethodType: intent.paymentMethodType,
+      status: intent.status,
+      expiresAt: intent.expiresAt,
+      createdAt: intent.createdAt,
+    }).catch(error => {
+      logger.error('Failed to send webhook for payment intent creation', error);
+    });
+
     res.status(201).json({ success: true, data: intent });
   } catch (error) {
     logger.error('Error creating payment intent:', error);
@@ -190,13 +205,27 @@ router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<v
     }
 
     if (!verificationPassed) {
-      await prisma.paymentIntent.update({
+      const failedIntent = await prisma.paymentIntent.update({
         where: { id: intent.id },
         data: { 
           status: 'failed', 
           verificationDetails: { error: verificationError } 
         },
       });
+      
+      // Send webhook for payment intent failure
+      WebhookService.sendWebhookToMerchant(intent.merchant, 'payment_intent.failed', {
+        id: failedIntent.id,
+        amount: failedIntent.amount,
+        merchant: failedIntent.merchant,
+        paymentMethodType: failedIntent.paymentMethodType,
+        status: failedIntent.status,
+        error: verificationError,
+        verificationDetails: failedIntent.verificationDetails,
+      }).catch(error => {
+        logger.error('Failed to send webhook for payment intent failure', error);
+      });
+      
       throw new AppError(verificationError, ErrorType.VALIDATION, 400);
     }
 
@@ -212,13 +241,27 @@ router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<v
     }
 
     if (verifiedAmount !== intent.amount) {
-      await prisma.paymentIntent.update({
+      const failedIntent = await prisma.paymentIntent.update({
         where: { id: intent.id },
         data: { 
           status: 'failed', 
           verificationDetails: { error: `Amount mismatch: expected ${intent.amount}, got ${verifiedAmount}` } 
         },
       });
+      
+      // Send webhook for payment intent failure
+      WebhookService.sendWebhookToMerchant(intent.merchant, 'payment_intent.failed', {
+        id: failedIntent.id,
+        amount: failedIntent.amount,
+        merchant: failedIntent.merchant,
+        paymentMethodType: failedIntent.paymentMethodType,
+        status: failedIntent.status,
+        error: `Amount mismatch: expected ${intent.amount}, got ${verifiedAmount}`,
+        verificationDetails: failedIntent.verificationDetails,
+      }).catch(error => {
+        logger.error('Failed to send webhook for payment intent failure', error);
+      });
+      
       throw new AppError(`Verified amount (${verifiedAmount}) does not match intent amount (${intent.amount})`, ErrorType.VALIDATION, 400);
     }
 
@@ -233,6 +276,21 @@ router.post('/:id/confirm', async (req: CustomRequest, res: Response): Promise<v
     });
 
     logger.info(`Confirmed payment intent ${intent.id} with status succeeded`);
+    
+    // Send webhook for payment intent confirmation
+    WebhookService.sendWebhookToMerchant(intent.merchant, 'payment_intent.confirmed', {
+      id: updatedIntent.id,
+      amount: updatedIntent.amount,
+      merchant: updatedIntent.merchant,
+      paymentMethodType: updatedIntent.paymentMethodType,
+      status: updatedIntent.status,
+      reference: updatedIntent.reference,
+      confirmedAt: updatedIntent.confirmedAt,
+      verificationDetails: updatedIntent.verificationDetails,
+    }).catch(error => {
+      logger.error('Failed to send webhook for payment intent confirmation', error);
+    });
+
     res.json({ success: true, data: updatedIntent });
   } catch (error) {
     logger.error('Error confirming payment intent:', error);

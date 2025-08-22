@@ -9,11 +9,13 @@ import CBERouter from './routes/verifyCBERoute';
 import telebirrRouter from './routes/verifyTelebirrRoute';
 import adminRouter from './routes/adminRoute';
 import paymentIntentsRouter from './routes/paymentIntentsRoute';
+import webhookRouter from './routes/webhookRoute';
 import logger from './utils/logger';
 import { verifyImageHandler } from "./services/verifyImage";
 import { requestLogger, initializeStatsCache } from './middleware/requestLogger';
 import { apiKeyAuth } from './middleware/apiKeyAuth';
 import { prisma, disconnectPrisma } from './utils/prisma';
+import { WebhookService } from './services/webhookService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,6 +34,15 @@ logger.info(`Platform: ${process.platform}`);
 
         // Initialize stats cache from database
         await initializeStatsCache();
+        
+        // Start background job for retrying failed webhooks
+        setInterval(async () => {
+            try {
+                await WebhookService.retryFailedWebhooks();
+            } catch (error) {
+                logger.error('Error in webhook retry job:', error);
+            }
+        }, 5 * 60 * 1000); // Run every 5 minutes
     } catch (error) {
         logger.error('Failed to initialize database connection:', error);
         process.exit(1);
@@ -67,6 +78,7 @@ app.use('/verify-cbe', CBERouter);
 app.use('/verify-telebirr', telebirrRouter);
 app.post('/verify-image', verifyImageHandler);
 app.use('/intents', paymentIntentsRouter);
+app.use('/webhooks', webhookRouter);
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -76,12 +88,14 @@ app.get('/health', (req: Request, res: Response) => {
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
     res.json({
-        name: 'Payment Verification API',
-        version: '1.1.0',
+        name: 'LumePay - Payment Gateway',
+        version: '1.0.0',
         endpoints: [
             '/verify-cbe',
             '/verify-telebirr',
-            '/verify-image'
+            '/verify-image',
+            '/intents',
+            '/webhooks'
         ]
     });
 });

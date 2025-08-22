@@ -66,6 +66,7 @@ model ApiKey {
   User          User?           @relation(fields: [userId], references: [id])
   PaymentIntent PaymentIntent[]
   UsageLog      UsageLog[]
+  WebhookSubscription WebhookSubscription[]
 
   @@index([key])
   @@index([userId])
@@ -108,6 +109,44 @@ model PaymentIntent {
   @@index([apiKeyId])
   @@index([merchant])
   @@index([reference])
+}
+
+model WebhookSubscription {
+  id           String   @id @default(uuid())
+  url          String
+  events       String[] // Array of event types to listen for
+  isActive     Boolean  @default(true)
+  secret       String   // For webhook signature verification
+  merchant     String   // Merchant identifier
+  apiKeyId     String
+  apiKey       ApiKey   @relation(fields: [apiKeyId], references: [id])
+  createdAt    DateTime @default(now())
+  lastTriggered DateTime?
+  failureCount Int      @default(0)
+  WebhookDelivery WebhookDelivery[]
+
+  @@index([apiKeyId])
+  @@index([merchant])
+  @@index([url])
+}
+
+model WebhookDelivery {
+  id                    String   @id @default(uuid())
+  webhookSubscriptionId String
+  webhookSubscription   WebhookSubscription @relation(fields: [webhookSubscriptionId], references: [id])
+  eventType             String
+  eventData             Json
+  status                String   @default("pending") // pending, delivered, failed
+  responseCode          Int?
+  responseBody          String?
+  attempts              Int      @default(0)
+  nextRetryAt           DateTime?
+  deliveredAt           DateTime?
+  createdAt             DateTime @default(now())
+
+  @@index([webhookSubscriptionId])
+  @@index([status])
+  @@index([nextRetryAt])
 }
 
 enum Role {
