@@ -357,20 +357,12 @@ LumePay is licensed under the MIT License. See the [LICENSE](LICENSE) file for d
 
 - Subscription management system
 - Advanced analytics dashboard
-- Multi-currency support
 - Enhanced fraud detection
-- Mobile SDKs
-
-### Long-term Vision
-
-- International payment support
-- Advanced merchant tools
-- AI-powered fraud prevention
-- Comprehensive reporting suite
+- SDKs
 
 ## Acknowledgments
 
-LumePay builds upon the foundation of open-source payment verification technology, adapted and enhanced for the Ethiopian market. Special thanks to the open-source community and early adopters who have helped shape this platform.
+LumePay builds upon the foundation of [Leul Zenebe's open-source payment verification technology](https://github.com/Vixen878/verifier-api)
 
 ---
 
